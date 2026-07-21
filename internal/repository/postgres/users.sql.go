@@ -16,12 +16,13 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users (
     email,
     name,
+    telegram_id,
     password_hash,
     role,
     created_at,
     updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6, $7
 )
 RETURNING id
 `
@@ -29,6 +30,7 @@ RETURNING id
 type CreateUserParams struct {
 	Email        string             `json:"email"`
 	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
 	PasswordHash *string            `json:"password_hash"`
 	Role         *string            `json:"role"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
@@ -39,6 +41,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UU
 	row := q.db.QueryRow(ctx, createUser,
 		arg.Email,
 		arg.Name,
+		arg.TelegramID,
 		arg.PasswordHash,
 		arg.Role,
 		arg.CreatedAt,
@@ -62,6 +65,7 @@ const getAllUsers = `-- name: GetAllUsers :many
 SELECT id,
     email,
     name,
+    telegram_id,
     password_hash,
     role,
     created_at,
@@ -73,6 +77,7 @@ type GetAllUsersRow struct {
 	ID           uuid.UUID          `json:"id"`
 	Email        string             `json:"email"`
 	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
 	PasswordHash *string            `json:"password_hash"`
 	Role         *string            `json:"role"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
@@ -92,6 +97,7 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
 			&i.ID,
 			&i.Email,
 			&i.Name,
+			&i.TelegramID,
 			&i.PasswordHash,
 			&i.Role,
 			&i.CreatedAt,
@@ -107,10 +113,50 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
 	return items, nil
 }
 
+const getByID = `-- name: GetByID :one
+SELECT id,
+    email,
+    name,
+    telegram_id,
+    password_hash,
+    role,
+    created_at,
+    updated_at
+FROM users WHERE id = $1 ORDER BY created_at DESC
+`
+
+type GetByIDRow struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
+	PasswordHash *string            `json:"password_hash"`
+	Role         *string            `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetByID(ctx context.Context, id uuid.UUID) (GetByIDRow, error) {
+	row := q.db.QueryRow(ctx, getByID, id)
+	var i GetByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.TelegramID,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getByUsername = `-- name: GetByUsername :one
 SELECT id,
     email,
     name,
+    telegram_id,
     password_hash,
     role,
     created_at,
@@ -122,6 +168,7 @@ type GetByUsernameRow struct {
 	ID           uuid.UUID          `json:"id"`
 	Email        string             `json:"email"`
 	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
 	PasswordHash *string            `json:"password_hash"`
 	Role         *string            `json:"role"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
@@ -135,6 +182,7 @@ func (q *Queries) GetByUsername(ctx context.Context, name string) (GetByUsername
 		&i.ID,
 		&i.Email,
 		&i.Name,
+		&i.TelegramID,
 		&i.PasswordHash,
 		&i.Role,
 		&i.CreatedAt,
