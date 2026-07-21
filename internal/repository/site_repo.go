@@ -98,6 +98,31 @@ func (r *SiteRepository) GetByUserID(ctx context.Context, user_id uuid.UUID) ([]
 	return sites, nil
 }
 
+func (r *SiteRepository) GetSiteByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+	site, err := r.queries.GetSiteByID(ctx, id)
+	if err != nil {
+		return domain.Site{}, err
+	}
+	return r.toDomain(site), err
+}
+
+func (r *SiteRepository) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
+	statsDB, err := r.queries.GetSiteStats(ctx, userID)
+    if err != nil {
+        return domain.SiteStats{}, err
+    }
+    
+    return domain.SiteStats{
+        TotalSites:      int(statsDB.TotalSites),
+        UpSites:         int(statsDB.UpSites),
+        DownSites:       int(statsDB.DownSites),
+        PendingSites:    int(statsDB.PendingSites),
+        AvgResponseTime: statsDB.AvgResponseTime,
+    }, nil
+}
+
+
+
 func (r *SiteRepository) toDomainSlice(sitesDB []postgres.Site) []domain.Site {
 	sites := make([]domain.Site, len(sitesDB))
 	for i, site := range sitesDB {
