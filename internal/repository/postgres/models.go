@@ -9,6 +9,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Site struct {
+	ID                   uuid.UUID          `json:"id"`
+	Url                  string             `json:"url"`
+	Name                 string             `json:"name"`
+	CheckIntervalSeconds int32              `json:"check_interval_seconds"`
+	UserID               uuid.UUID          `json:"user_id"`
+	Status               *string            `json:"status"`
+	LastStatusCode       *int32             `json:"last_status_code"`
+	LastCheckedAt        pgtype.Timestamptz `json:"last_checked_at"`
+	ResponseTimeMs       *int32             `json:"response_time_ms"`
+	IsActive             *bool              `json:"is_active"`
+	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
+	VerificationToken    *string            `json:"verification_token"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
 type User struct {
 	ID           uuid.UUID          `json:"id"`
 	Name         string             `json:"name"`

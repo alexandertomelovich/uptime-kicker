@@ -38,7 +38,7 @@ SELECT id,
     updated_at
 FROM sites ORDER BY created_at DESC;
 
--- name: GetByID :one
+-- name: GetSiteByID :one
 SELECT id,
     url,
     name,
