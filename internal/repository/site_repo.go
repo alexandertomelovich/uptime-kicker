@@ -20,38 +20,37 @@ func NewSiteRepository(queries *postgres.Queries) *SiteRepository {
 
 func (r *SiteRepository) toDomain(siteDB postgres.Site) domain.Site {
 	return domain.Site{
-		ID: siteDB.ID,
-		Url: siteDB.Url,
-		Name: siteDB.Name,
+		ID:                   siteDB.ID,
+		Url:                  siteDB.Url,
+		Name:                 siteDB.Name,
 		CheckIntervalSeconds: int(siteDB.CheckIntervalSeconds),
-		UserID: siteDB.UserID,
-		Status: domain.SiteStatus(r.safeString(siteDB.Status)),
-		LastStatusCode: siteDB.LastStatusCode,
-		LastCheckedAt: r.pgTimestampToPtr(siteDB.LastCheckedAt),
-		ResponseTimeMs: siteDB.ResponseTimeMs,
-		IsActive: r.safeBool(siteDB.IsActive),
-		VerifiedAt: r.pgTimestampToPtr(siteDB.VerifiedAt),
-		VerificationToken: r.safeString(siteDB.VerificationToken),
-		CreatedAt: siteDB.CreatedAt.Time,
-		UpdatedAt: siteDB.UpdatedAt.Time,
-
+		UserID:               siteDB.UserID,
+		Status:               domain.SiteStatus(r.safeString(siteDB.Status)),
+		LastStatusCode:       siteDB.LastStatusCode,
+		LastCheckedAt:        r.pgTimestampToPtr(siteDB.LastCheckedAt),
+		ResponseTimeMs:       siteDB.ResponseTimeMs,
+		IsActive:             r.safeBool(siteDB.IsActive),
+		VerifiedAt:           r.pgTimestampToPtr(siteDB.VerifiedAt),
+		VerificationToken:    r.safeString(siteDB.VerificationToken),
+		CreatedAt:            siteDB.CreatedAt.Time,
+		UpdatedAt:            siteDB.UpdatedAt.Time,
 	}
 }
 
 func (r *SiteRepository) fromDomain(site domain.Site) postgres.CreateSiteParams {
 	return postgres.CreateSiteParams{
-		Url: site.Url,
-		Name: site.Name,
+		Url:                  site.Url,
+		Name:                 site.Name,
 		CheckIntervalSeconds: int32(site.CheckIntervalSeconds),
-		UserID: site.UserID,
-		Status: (*string)(&site.Status),
-		LastStatusCode: site.LastStatusCode,
-		LastCheckedAt: r.timeToPgTimestamp(site.LastCheckedAt),
-		ResponseTimeMs: site.ResponseTimeMs,
-		IsActive: &site.IsActive,
-		VerifiedAt: r.timeToPgTimestamp(site.VerifiedAt),
-		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		UserID:               site.UserID,
+		Status:               (*string)(&site.Status),
+		LastStatusCode:       site.LastStatusCode,
+		LastCheckedAt:        r.timeToPgTimestamp(site.LastCheckedAt),
+		ResponseTimeMs:       site.ResponseTimeMs,
+		IsActive:             &site.IsActive,
+		VerifiedAt:           r.timeToPgTimestamp(site.VerifiedAt),
+		CreatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		UpdatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
@@ -62,13 +61,13 @@ func (r *SiteRepository) Create(ctx context.Context, site domain.Site) (uuid.UUI
 
 func (r *SiteRepository) Delete(ctx context.Context, id, user_id uuid.UUID) error {
 	params := postgres.DeleteSiteParams{
-		ID: id,
+		ID:     id,
 		UserID: user_id,
 	}
 	return r.queries.DeleteSite(ctx, params)
 }
 
-func(r *SiteRepository) GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error) {
+func (r *SiteRepository) GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetActiveSitesByStatus(ctx, (*string)(&status))
 	if err != nil {
 		return nil, err
@@ -76,7 +75,7 @@ func(r *SiteRepository) GetActiveSitesByStatus(ctx context.Context, status domai
 
 	sites := r.toDomainSlice(sitesDB)
 	return sites, nil
-} 
+}
 
 func (r *SiteRepository) GetAllSites(ctx context.Context) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetAllSites(ctx)
@@ -98,7 +97,7 @@ func (r *SiteRepository) GetByUserID(ctx context.Context, user_id uuid.UUID) ([]
 	return sites, nil
 }
 
-func (r *SiteRepository) GetSiteByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+func (r *SiteRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := r.queries.GetSiteByID(ctx, id)
 	if err != nil {
 		return domain.Site{}, err
@@ -108,20 +107,49 @@ func (r *SiteRepository) GetSiteByID(ctx context.Context, id uuid.UUID) (domain.
 
 func (r *SiteRepository) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
 	statsDB, err := r.queries.GetSiteStats(ctx, userID)
-    if err != nil {
-        return domain.SiteStats{}, err
-    }
-    
-    return domain.SiteStats{
-        TotalSites:      int(statsDB.TotalSites),
-        UpSites:         int(statsDB.UpSites),
-        DownSites:       int(statsDB.DownSites),
-        PendingSites:    int(statsDB.PendingSites),
-        AvgResponseTime: statsDB.AvgResponseTime,
-    }, nil
+	if err != nil {
+		return domain.SiteStats{}, err
+	}
+
+	return domain.SiteStats{
+		TotalSites:      int(statsDB.TotalSites),
+		UpSites:         int(statsDB.UpSites),
+		DownSites:       int(statsDB.DownSites),
+		PendingSites:    int(statsDB.PendingSites),
+		AvgResponseTime: statsDB.AvgResponseTime,
+	}, nil
 }
 
+func (r *SiteRepository) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
+	sitesDB, err := r.queries.GetSitesNeedingCheck(ctx, int32(limit))
+	if err != nil {
+		return nil, err
+	}
+	return r.toDomainSlice(sitesDB), nil
+}
 
+func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, site domain.Site) (domain.Site, error) {
+    params := postgres.UpdateSiteStatusParams{
+        Status:         (*string)(&site.Status),
+        LastStatusCode: site.LastStatusCode,
+        LastCheckedAt:  r.timeToPgTimestamp(site.LastCheckedAt),
+        ResponseTimeMs: site.ResponseTimeMs,
+        ID:             site.ID,
+    }
+
+    updated, err := r.queries.UpdateSiteStatus(ctx, params)
+    if err != nil {
+        return domain.Site{}, err
+    }
+
+    site.Status = domain.SiteStatus(r.safeString(updated.Status))
+    site.LastStatusCode = updated.LastStatusCode
+    site.LastCheckedAt = r.pgTimestampToPtr(updated.LastCheckedAt)
+    site.ResponseTimeMs = updated.ResponseTimeMs
+    site.UpdatedAt = updated.UpdatedAt.Time
+    
+    return site, nil
+}
 
 func (r *SiteRepository) toDomainSlice(sitesDB []postgres.Site) []domain.Site {
 	sites := make([]domain.Site, len(sitesDB))
@@ -142,7 +170,7 @@ func (r *SiteRepository) timeToPgTimestamp(t *time.Time) pgtype.Timestamptz {
 	if t == nil {
 		return pgtype.Timestamptz{Valid: false}
 	}
-	return pgtype.Timestamptz{Valid: true}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
 
 func (r *SiteRepository) safeString(s *string) string {
@@ -153,8 +181,8 @@ func (r *SiteRepository) safeString(s *string) string {
 }
 
 func (r *SiteRepository) safeBool(b *bool) bool {
-    if b == nil {
-        return true
-    }
-    return *b
+	if b == nil {
+		return true
+	}
+	return *b
 }

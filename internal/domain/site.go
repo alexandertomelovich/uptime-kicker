@@ -38,3 +38,4 @@ type SiteStats struct {
 	PendingSites    int     `json:"pending_sites"`
 	AvgResponseTime float64 `json:"avg_response_time"`
 }
+
