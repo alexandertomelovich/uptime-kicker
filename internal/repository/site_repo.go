@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/postgres"
 	"time"
@@ -56,7 +57,11 @@ func (r *SiteRepository) fromDomain(site domain.Site) postgres.CreateSiteParams 
 
 func (r *SiteRepository) Create(ctx context.Context, site domain.Site) (uuid.UUID, error) {
 	params := r.fromDomain(site)
-	return r.queries.CreateSite(ctx, params)
+	id, err := r.queries.CreateSite(ctx, params)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("repository.CreateSite: %w", err)
+	}
+	return id, nil
 }
 
 func (r *SiteRepository) Delete(ctx context.Context, id, user_id uuid.UUID) error {
@@ -64,13 +69,16 @@ func (r *SiteRepository) Delete(ctx context.Context, id, user_id uuid.UUID) erro
 		ID:     id,
 		UserID: user_id,
 	}
-	return r.queries.DeleteSite(ctx, params)
+	if err := r.queries.DeleteSite(ctx, params); err != nil {
+		return fmt.Errorf("repository.DeleteSite: %w", err)
+	}
+	return nil
 }
 
 func (r *SiteRepository) GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetActiveSitesByStatus(ctx, (*string)(&status))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository.GetActiveSitesByStatus: %w", err)
 	}
 
 	sites := r.toDomainSlice(sitesDB)
@@ -80,7 +88,7 @@ func (r *SiteRepository) GetActiveSitesByStatus(ctx context.Context, status doma
 func (r *SiteRepository) GetAllSites(ctx context.Context) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetAllSites(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository.GetAllSites: %w", err)
 	}
 
 	sites := r.toDomainSlice(sitesDB)
@@ -90,7 +98,7 @@ func (r *SiteRepository) GetAllSites(ctx context.Context) ([]domain.Site, error)
 func (r *SiteRepository) GetByUserID(ctx context.Context, user_id uuid.UUID) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetByUserID(ctx, user_id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository.GetByUserID: %w", err)
 	}
 
 	sites := r.toDomainSlice(sitesDB)
@@ -100,15 +108,15 @@ func (r *SiteRepository) GetByUserID(ctx context.Context, user_id uuid.UUID) ([]
 func (r *SiteRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := r.queries.GetSiteByID(ctx, id)
 	if err != nil {
-		return domain.Site{}, err
+		return domain.Site{}, fmt.Errorf("repository.GetByID: %w", err)
 	}
-	return r.toDomain(site), err
+	return r.toDomain(site), nil
 }
 
 func (r *SiteRepository) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
 	statsDB, err := r.queries.GetSiteStats(ctx, userID)
 	if err != nil {
-		return domain.SiteStats{}, err
+		return domain.SiteStats{}, fmt.Errorf("repository.GetSiteStats: %w", err)
 	}
 
 	return domain.SiteStats{
@@ -123,7 +131,7 @@ func (r *SiteRepository) GetSiteStats(ctx context.Context, userID uuid.UUID) (do
 func (r *SiteRepository) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
 	sitesDB, err := r.queries.GetSitesNeedingCheck(ctx, int32(limit))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository.GetSitesNeedingCheck: %w", err)
 	}
 	return r.toDomainSlice(sitesDB), nil
 }
@@ -139,7 +147,7 @@ func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, site domain.Site)
 
     updated, err := r.queries.UpdateSiteStatus(ctx, params)
     if err != nil {
-        return domain.Site{}, err
+        return domain.Site{}, fmt.Errorf("repository.UpdateSiteStatus: %w", err)
     }
 
     site.Status = domain.SiteStatus(r.safeString(updated.Status))

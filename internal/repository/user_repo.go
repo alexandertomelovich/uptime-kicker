@@ -2,13 +2,13 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/postgres"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-
 )
 
 type UserRepository struct {
@@ -52,17 +52,25 @@ func (r *UserRepository) safeString(s *string) string {
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (uuid.UUID, error) {
 	params := r.fromDomain(user)
-	return r.queries.CreateUser(ctx, params)
+
+	id, err := r.queries.CreateUser(ctx, params)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("repository.CreateUser: %w", err)
+	}
+	return id, nil
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.queries.DeleteUser(ctx, id)
+	if err := r.queries.DeleteUser(ctx, id); err != nil {
+		return fmt.Errorf("repository.DeleteUser: %w", err)
+	}
+	return nil
 }
 
 func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 	usersDB, err := r.queries.GetAllUsers(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository.GetAllUser: %w", err)
 	}
 	users := make([]domain.User, len(usersDB))
 	for i, userDB := range usersDB {
@@ -83,7 +91,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 func(r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	userDB, err := r.queries.GetByID(ctx, id)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("repository.GetByIDUser: %w", err)
 	}
 
 	return domain.User{
@@ -101,7 +109,7 @@ func(r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User,
 func(r *UserRepository) GetByUsername(ctx context.Context, username string) (domain.User, error) {
 	userDB, err := r.queries.GetByUsername(ctx, username)
 	if err != nil {
-		return domain.User{}, err
+		return domain.User{}, fmt.Errorf("repository.GetByUsername: %w", err)
 	}
 
 	return domain.User{
@@ -127,7 +135,7 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
 
 	_, err := r.queries.UpdateUser(ctx, params)
 	if err != nil {
-		return err
+		return fmt.Errorf("repository.UpdateUser: %w", err)
 	}
 	return nil
 }
