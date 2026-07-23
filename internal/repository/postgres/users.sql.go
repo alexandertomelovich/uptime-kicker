@@ -113,6 +113,47 @@ func (q *Queries) GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error) {
 	return items, nil
 }
 
+const getByEmail = `-- name: GetByEmail :one
+SELECT id,
+    email,
+    name,
+    telegram_id,
+    password_hash,
+    role,
+    created_at,
+    updated_at
+FROM users 
+WHERE email = $1 
+LIMIT 1
+`
+
+type GetByEmailRow struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
+	PasswordHash *string            `json:"password_hash"`
+	Role         *string            `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetByEmail(ctx context.Context, email string) (GetByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getByEmail, email)
+	var i GetByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.TelegramID,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getByID = `-- name: GetByID :one
 SELECT id,
     email,
@@ -139,6 +180,47 @@ type GetByIDRow struct {
 func (q *Queries) GetByID(ctx context.Context, id uuid.UUID) (GetByIDRow, error) {
 	row := q.db.QueryRow(ctx, getByID, id)
 	var i GetByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.TelegramID,
+		&i.PasswordHash,
+		&i.Role,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getByTelegramID = `-- name: GetByTelegramID :one
+SELECT id,
+    email,
+    name,
+    telegram_id,
+    password_hash,
+    role,
+    created_at,
+    updated_at
+FROM users 
+WHERE telegram_id = $1 
+LIMIT 1
+`
+
+type GetByTelegramIDRow struct {
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	Name         string             `json:"name"`
+	TelegramID   int64              `json:"telegram_id"`
+	PasswordHash *string            `json:"password_hash"`
+	Role         *string            `json:"role"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetByTelegramID(ctx context.Context, telegramID int64) (GetByTelegramIDRow, error) {
+	row := q.db.QueryRow(ctx, getByTelegramID, telegramID)
+	var i GetByTelegramIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,

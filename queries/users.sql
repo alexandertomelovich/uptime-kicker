@@ -45,6 +45,32 @@ SELECT id,
     updated_at
 FROM users WHERE id = $1 ORDER BY created_at DESC;
 
+-- name: GetByEmail :one
+SELECT id,
+    email,
+    name,
+    telegram_id,
+    password_hash,
+    role,
+    created_at,
+    updated_at
+FROM users 
+WHERE email = $1 
+LIMIT 1;
+
+-- name: GetByTelegramID :one
+SELECT id,
+    email,
+    name,
+    telegram_id,
+    password_hash,
+    role,
+    created_at,
+    updated_at
+FROM users 
+WHERE telegram_id = $1 
+LIMIT 1;
+
 -- name: UpdateUser :one
 UPDATE users
 SET 

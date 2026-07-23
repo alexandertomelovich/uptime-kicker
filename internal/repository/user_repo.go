@@ -21,25 +21,25 @@ func NewUserRepository(queries *postgres.Queries) *UserRepository {
 
 func (r *UserRepository) toDomain(dbUser postgres.User) domain.User {
 	return domain.User{
-		ID: dbUser.ID,
-		Name: dbUser.Name,
-		Email: dbUser.Email,
-		TelegramID: dbUser.TelegramID,
+		ID:           dbUser.ID,
+		Name:         dbUser.Name,
+		Email:        dbUser.Email,
+		TelegramID:   dbUser.TelegramID,
 		PasswordHash: r.safeString(dbUser.PasswordHash),
-		Role: r.safeString(dbUser.Role),
-		CreatedAt: dbUser.CreatedAt.Time,
-		UpdatedAt: dbUser.UpdatedAt.Time,
+		Role:         r.safeString(dbUser.Role),
+		CreatedAt:    dbUser.CreatedAt.Time,
+		UpdatedAt:    dbUser.UpdatedAt.Time,
 	}
 }
 
 func (r *UserRepository) fromDomain(user domain.User) postgres.CreateUserParams {
 	return postgres.CreateUserParams{
-		Email: user.Email,
-		Name: user.Email,
+		Email:        user.Email,
+		Name:         user.Email,
 		PasswordHash: &user.PasswordHash,
-		Role: &user.Role,
-		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		Role:         &user.Role,
+		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		UpdatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
@@ -75,62 +75,98 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 	users := make([]domain.User, len(usersDB))
 	for i, userDB := range usersDB {
 		users[i] = domain.User{
-			ID: userDB.ID,
-			Name: userDB.Name,
-			Email: userDB.Email,
-			TelegramID: userDB.TelegramID,
+			ID:           userDB.ID,
+			Name:         userDB.Name,
+			Email:        userDB.Email,
+			TelegramID:   userDB.TelegramID,
 			PasswordHash: r.safeString(userDB.PasswordHash),
-			Role: r.safeString(userDB.Role),
-			CreatedAt: userDB.CreatedAt.Time,
-			UpdatedAt: userDB.UpdatedAt.Time,
+			Role:         r.safeString(userDB.Role),
+			CreatedAt:    userDB.CreatedAt.Time,
+			UpdatedAt:    userDB.UpdatedAt.Time,
 		}
 	}
 	return users, nil
 }
 
-func(r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.User, error) {
+	userDB, err := r.queries.GetByEmail(ctx, email)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("repository.GetByEmail: %w", err)
+	}
+
+	return domain.User{
+		ID:           userDB.ID,
+		Name:         userDB.Name,
+		Email:        userDB.Email,
+		TelegramID:   userDB.TelegramID,
+		PasswordHash: r.safeString(userDB.PasswordHash),
+		Role:         r.safeString(userDB.Role),
+		CreatedAt:    userDB.CreatedAt.Time,
+		UpdatedAt:    userDB.UpdatedAt.Time,
+	}, nil
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	userDB, err := r.queries.GetByID(ctx, id)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("repository.GetByIDUser: %w", err)
 	}
 
 	return domain.User{
-        ID:           userDB.ID,
-        Name:         userDB.Name,
-        Email:        userDB.Email,
-        TelegramID:  userDB.TelegramID,
-        PasswordHash: r.safeString(userDB.PasswordHash),
-        Role:         r.safeString(userDB.Role),
-        CreatedAt:    userDB.CreatedAt.Time,
-        UpdatedAt:    userDB.UpdatedAt.Time,
-    }, nil
+		ID:           userDB.ID,
+		Name:         userDB.Name,
+		Email:        userDB.Email,
+		TelegramID:   userDB.TelegramID,
+		PasswordHash: r.safeString(userDB.PasswordHash),
+		Role:         r.safeString(userDB.Role),
+		CreatedAt:    userDB.CreatedAt.Time,
+		UpdatedAt:    userDB.UpdatedAt.Time,
+	}, nil
 }
 
-func(r *UserRepository) GetByUsername(ctx context.Context, username string) (domain.User, error) {
+func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) (domain.User, error) {
+	userDB, err := r.queries.GetByTelegramID(ctx, telegramID)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("repository.GetByTelegramID: %w", err)
+	}
+
+	return domain.User{
+		ID:           userDB.ID,
+		Name:         userDB.Name,
+		Email:        userDB.Email,
+		TelegramID:   userDB.TelegramID,
+		PasswordHash: r.safeString(userDB.PasswordHash),
+		Role:         r.safeString(userDB.Role),
+		CreatedAt:    userDB.CreatedAt.Time,
+		UpdatedAt:    userDB.UpdatedAt.Time,
+	}, nil
+}
+
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (domain.User, error) {
 	userDB, err := r.queries.GetByUsername(ctx, username)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("repository.GetByUsername: %w", err)
 	}
 
 	return domain.User{
-        ID:           userDB.ID,
-        Name:         userDB.Name,
-        Email:        userDB.Email,
-        TelegramID:  userDB.TelegramID,
-        PasswordHash: r.safeString(userDB.PasswordHash),
-        Role:         r.safeString(userDB.Role),
-        CreatedAt:    userDB.CreatedAt.Time,
-        UpdatedAt:    userDB.UpdatedAt.Time,
-    }, nil
+		ID:           userDB.ID,
+		Name:         userDB.Name,
+		Email:        userDB.Email,
+		TelegramID:   userDB.TelegramID,
+		PasswordHash: r.safeString(userDB.PasswordHash),
+		Role:         r.safeString(userDB.Role),
+		CreatedAt:    userDB.CreatedAt.Time,
+		UpdatedAt:    userDB.UpdatedAt.Time,
+	}, nil
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
 	params := postgres.UpdateUserParams{
-		Email: user.Email,
-		Name: user.Name,
+		Email:        user.Email,
+		Name:         user.Name,
 		PasswordHash: &user.PasswordHash,
-		Role: &user.Role,
-		ID: user.ID,
+		Role:         &user.Role,
+		ID:           user.ID,
 	}
 
 	_, err := r.queries.UpdateUser(ctx, params)
@@ -139,4 +175,3 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
 	}
 	return nil
 }
-
