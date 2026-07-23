@@ -24,11 +24,9 @@ INSERT INTO sites (
     response_time_ms,
     is_active,
     verified_at,
-    verification_token,
-    created_at,
-    updated_at
+    verification_token
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING id
 `
@@ -45,8 +43,6 @@ type CreateSiteParams struct {
 	IsActive             *bool              `json:"is_active"`
 	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
 	VerificationToken    *string            `json:"verification_token"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error) {
@@ -62,8 +58,6 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UU
 		arg.IsActive,
 		arg.VerifiedAt,
 		arg.VerificationToken,
-		arg.CreatedAt,
-		arg.UpdatedAt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)

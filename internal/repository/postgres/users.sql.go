@@ -18,23 +18,19 @@ INSERT INTO users (
     name,
     telegram_id,
     password_hash,
-    role,
-    created_at,
-    updated_at
+    role
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5
 )
 RETURNING id
 `
 
 type CreateUserParams struct {
-	Email        string             `json:"email"`
-	Name         string             `json:"name"`
-	TelegramID   int64              `json:"telegram_id"`
-	PasswordHash *string            `json:"password_hash"`
-	Role         *string            `json:"role"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Email        string  `json:"email"`
+	Name         string  `json:"name"`
+	TelegramID   int64   `json:"telegram_id"`
+	PasswordHash *string `json:"password_hash"`
+	Role         *string `json:"role"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error) {
@@ -44,8 +40,6 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UU
 		arg.TelegramID,
 		arg.PasswordHash,
 		arg.Role,
-		arg.CreatedAt,
-		arg.UpdatedAt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -123,8 +117,7 @@ SELECT id,
     created_at,
     updated_at
 FROM users 
-WHERE email = $1 
-LIMIT 1
+WHERE email = $1
 `
 
 type GetByEmailRow struct {
@@ -163,7 +156,7 @@ SELECT id,
     role,
     created_at,
     updated_at
-FROM users WHERE id = $1 ORDER BY created_at DESC
+FROM users WHERE id = $1
 `
 
 type GetByIDRow struct {
@@ -203,8 +196,7 @@ SELECT id,
     created_at,
     updated_at
 FROM users 
-WHERE telegram_id = $1 
-LIMIT 1
+WHERE telegram_id = $1
 `
 
 type GetByTelegramIDRow struct {

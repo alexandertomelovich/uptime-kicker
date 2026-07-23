@@ -10,11 +10,9 @@ INSERT INTO sites (
     response_time_ms,
     is_active,
     verified_at,
-    verification_token,
-    created_at,
-    updated_at
+    verification_token
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING id;
 

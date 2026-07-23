@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/notifier"
 	"health_checker/internal/repository"
@@ -30,7 +32,8 @@ type RegisterRequest struct {
 }
 
 func (s *UserService) Register(ctx context.Context, user domain.User) (uuid.UUID, error) {
-	if user.
+	
 }
+	
 
 

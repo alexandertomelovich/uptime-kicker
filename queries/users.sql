@@ -4,11 +4,9 @@ INSERT INTO users (
     name,
     telegram_id,
     password_hash,
-    role,
-    created_at,
-    updated_at
+    role
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7
+    $1, $2, $3, $4, $5
 )
 RETURNING id;
 
@@ -43,7 +41,7 @@ SELECT id,
     role,
     created_at,
     updated_at
-FROM users WHERE id = $1 ORDER BY created_at DESC;
+FROM users WHERE id = $1;
 
 -- name: GetByEmail :one
 SELECT id,
@@ -55,8 +53,7 @@ SELECT id,
     created_at,
     updated_at
 FROM users 
-WHERE email = $1 
-LIMIT 1;
+WHERE email = $1;
 
 -- name: GetByTelegramID :one
 SELECT id,
@@ -68,8 +65,7 @@ SELECT id,
     created_at,
     updated_at
 FROM users 
-WHERE telegram_id = $1 
-LIMIT 1;
+WHERE telegram_id = $1;
 
 -- name: UpdateUser :one
 UPDATE users
