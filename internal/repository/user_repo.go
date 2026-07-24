@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/postgres"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type UserRepository struct {
@@ -38,8 +36,6 @@ func (r *UserRepository) fromDomain(user domain.User) postgres.CreateUserParams 
 		Name:         user.Email,
 		PasswordHash: &user.PasswordHash,
 		Role:         &user.Role,
-		CreatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		UpdatedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 

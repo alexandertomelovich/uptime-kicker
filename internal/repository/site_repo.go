@@ -50,8 +50,6 @@ func (r *SiteRepository) fromDomain(site domain.Site) postgres.CreateSiteParams 
 		ResponseTimeMs:       site.ResponseTimeMs,
 		IsActive:             &site.IsActive,
 		VerifiedAt:           r.timeToPgTimestamp(site.VerifiedAt),
-		CreatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		UpdatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
