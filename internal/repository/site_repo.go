@@ -151,6 +151,31 @@ func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, site domain.Site)
     return site, nil
 }
 
+func (r *SiteRepository) Update(ctx context.Context, site domain.Site) (domain.Site, error) {
+    params := postgres.UpdateSiteParams{
+        ID:     site.ID,
+        UserID: site.UserID,
+    }
+
+    if site.Url != "" {
+        params.Url = &site.Url
+    }
+    if site.Name != "" {
+        params.Name = &site.Name
+    }
+    if site.CheckIntervalSeconds > 0 {
+        v := int32(site.CheckIntervalSeconds)
+        params.CheckIntervalSeconds = &v
+    }
+
+    updated, err := r.queries.UpdateSite(ctx, params)
+    if err != nil {
+        return domain.Site{}, err
+    }
+
+    return r.toDomain(updated), nil
+}
+
 func (r *SiteRepository) toDomainSlice(sitesDB []postgres.Site) []domain.Site {
 	sites := make([]domain.Site, len(sitesDB))
 	for i, site := range sitesDB {
