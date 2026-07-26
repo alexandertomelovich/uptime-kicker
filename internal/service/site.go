@@ -74,8 +74,12 @@ func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, toke
 	site.IsActive = true
 	site.VerifiedAt = &now
 	site.UpdatedAt = now
-	//update...
-
+	
+	_, err = s.repo.Update(ctx, site)
+	if err != nil {
+		return fmt.Errorf("service.Update: %w", err)
+	}
+	return nil
 }
 
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
