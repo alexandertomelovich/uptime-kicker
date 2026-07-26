@@ -134,6 +134,31 @@ RETURNING
     response_time_ms,
     updated_at;
 
+-- name: UpdateSite :one
+UPDATE sites
+SET 
+    url = COALESCE(sqlc.narg('url'), url),
+    name = COALESCE(sqlc.narg('name'), name),
+    check_interval_seconds = COALESCE(sqlc.narg('check_interval_seconds'), check_interval_seconds),
+    is_active = COALESCE(sqlc.narg('is_active'), is_active),
+    updated_at = NOW()
+WHERE id = sqlc.arg('id') AND user_id = sqlc.arg('user_id')
+RETURNING 
+    id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
+    status,
+    last_status_code,
+    last_checked_at,
+    response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
+    updated_at;
+
 -- name: GetSiteStats :one
 SELECT 
     COUNT(*) as total_sites,

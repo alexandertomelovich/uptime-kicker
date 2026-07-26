@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository"
@@ -29,10 +31,13 @@ type CreateSiteRequest struct {
 
 func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest) error {
 	if req.CheckIntervalSeconds < 30 {
-		return fmt.Errorf("minimum value 30 seconds")
+		req.CheckIntervalSeconds = 30
 	}
 	
-	//нужно будет сделать верификацию
+	token, err := generateVerificationToken()
+	if err != nil {
+		return fmt.Errorf("getenate token error: %w", err)
+	}
 
 	site := domain.Site{
 		Url: req.Url,
@@ -40,13 +45,37 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest) error {
 		CheckIntervalSeconds: req.CheckIntervalSeconds,
 		UserID: req.UserID,
 		Status: "pending",
-		IsActive: true,
+		VerificationToken: token,
+		IsActive: false,
 	}
-	_, err := s.repo.Create(ctx, site)
+	_, err = s.repo.Create(ctx, site)
 	if err != nil {
 		return fmt.Errorf("service.Create: %w", err)
 	}
 	return nil
+}
+
+func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
+	site, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("site not found")
+	}
+
+	if site.UserID != userID {
+		return fmt.Errorf("site does not belong to user")
+	}
+
+	if token != site.VerificationToken {
+		return fmt.Errorf("invalid verification token")
+	}
+
+	now := time.Now()
+
+	site.IsActive = true
+	site.VerifiedAt = &now
+	site.UpdatedAt = now
+	//update...
+
 }
 
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
@@ -111,7 +140,7 @@ func(s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]dom
 	}
 	return sites, nil
 }
-	// В сервисе:
+
 func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
     site, err := s.repo.GetByID(ctx, siteID)
     if err != nil {
@@ -140,4 +169,12 @@ func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID
     }
     
     return updatedSite, nil
+}
+
+func generateVerificationToken() (string, error) {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
