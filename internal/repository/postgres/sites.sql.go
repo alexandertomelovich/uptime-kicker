@@ -373,6 +373,70 @@ func (q *Queries) GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site
 	return items, nil
 }
 
+const updateSite = `-- name: UpdateSite :one
+UPDATE sites
+SET 
+    url = COALESCE($1, url),
+    name = COALESCE($2, name),
+    check_interval_seconds = COALESCE($3, check_interval_seconds),
+    is_active = COALESCE($4, is_active),
+    updated_at = NOW()
+WHERE id = $5 AND user_id = $6
+RETURNING 
+    id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
+    status,
+    last_status_code,
+    last_checked_at,
+    response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
+    updated_at
+`
+
+type UpdateSiteParams struct {
+	Url                  *string   `json:"url"`
+	Name                 *string   `json:"name"`
+	CheckIntervalSeconds *int32    `json:"check_interval_seconds"`
+	IsActive             *bool     `json:"is_active"`
+	ID                   uuid.UUID `json:"id"`
+	UserID               uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, error) {
+	row := q.db.QueryRow(ctx, updateSite,
+		arg.Url,
+		arg.Name,
+		arg.CheckIntervalSeconds,
+		arg.IsActive,
+		arg.ID,
+		arg.UserID,
+	)
+	var i Site
+	err := row.Scan(
+		&i.ID,
+		&i.Url,
+		&i.Name,
+		&i.CheckIntervalSeconds,
+		&i.UserID,
+		&i.Status,
+		&i.LastStatusCode,
+		&i.LastCheckedAt,
+		&i.ResponseTimeMs,
+		&i.IsActive,
+		&i.VerifiedAt,
+		&i.VerificationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateSiteStatus = `-- name: UpdateSiteStatus :one
 UPDATE sites
 SET 
@@ -423,6 +487,62 @@ func (q *Queries) UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusPara
 		&i.LastStatusCode,
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const verifySite = `-- name: VerifySite :one
+UPDATE sites
+SET
+    status = 'up',
+    is_active = true,
+    verified_at = NOW(),
+    verification_token = NULL,
+    updated_at = NOW()
+WHERE id = $1
+  AND user_id = $2
+  AND verification_token = $3
+RETURNING
+    id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
+    status,
+    last_status_code,
+    last_checked_at,
+    response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
+    updated_at
+`
+
+type VerifySiteParams struct {
+	ID                uuid.UUID `json:"id"`
+	UserID            uuid.UUID `json:"user_id"`
+	VerificationToken *string   `json:"verification_token"`
+}
+
+func (q *Queries) VerifySite(ctx context.Context, arg VerifySiteParams) (Site, error) {
+	row := q.db.QueryRow(ctx, verifySite, arg.ID, arg.UserID, arg.VerificationToken)
+	var i Site
+	err := row.Scan(
+		&i.ID,
+		&i.Url,
+		&i.Name,
+		&i.CheckIntervalSeconds,
+		&i.UserID,
+		&i.Status,
+		&i.LastStatusCode,
+		&i.LastCheckedAt,
+		&i.ResponseTimeMs,
+		&i.IsActive,
+		&i.VerifiedAt,
+		&i.VerificationToken,
+		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err

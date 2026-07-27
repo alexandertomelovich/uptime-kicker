@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"health_checker/internal/domain"
+	"health_checker/internal/repository/converters"
 	"health_checker/internal/repository/postgres"
 
 	"github.com/google/uuid"
@@ -23,8 +24,8 @@ func (r *UserRepository) toDomain(dbUser postgres.User) domain.User {
 		Name:         dbUser.Name,
 		Email:        dbUser.Email,
 		TelegramID:   dbUser.TelegramID,
-		PasswordHash: r.safeString(dbUser.PasswordHash),
-		Role:         r.safeString(dbUser.Role),
+		PasswordHash: converters.SafeString(dbUser.PasswordHash),
+		Role:         converters.SafeString(dbUser.Role),
 		CreatedAt:    dbUser.CreatedAt.Time,
 		UpdatedAt:    dbUser.UpdatedAt.Time,
 	}
@@ -33,17 +34,11 @@ func (r *UserRepository) toDomain(dbUser postgres.User) domain.User {
 func (r *UserRepository) fromDomain(user domain.User) postgres.CreateUserParams {
 	return postgres.CreateUserParams{
 		Email:        user.Email,
-		Name:         user.Email,
+		Name:         user.Name,
+		TelegramID:   user.TelegramID,
 		PasswordHash: &user.PasswordHash,
 		Role:         &user.Role,
 	}
-}
-
-func (r *UserRepository) safeString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (uuid.UUID, error) {
@@ -75,8 +70,8 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 			Name:         userDB.Name,
 			Email:        userDB.Email,
 			TelegramID:   userDB.TelegramID,
-			PasswordHash: r.safeString(userDB.PasswordHash),
-			Role:         r.safeString(userDB.Role),
+			PasswordHash: converters.SafeString(userDB.PasswordHash),
+			Role:         converters.SafeString(userDB.Role),
 			CreatedAt:    userDB.CreatedAt.Time,
 			UpdatedAt:    userDB.UpdatedAt.Time,
 		}
@@ -95,8 +90,8 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.U
 		Name:         userDB.Name,
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
-		PasswordHash: r.safeString(userDB.PasswordHash),
-		Role:         r.safeString(userDB.Role),
+		PasswordHash: converters.SafeString(userDB.PasswordHash),
+		Role:         converters.SafeString(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -113,8 +108,8 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		Name:         userDB.Name,
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
-		PasswordHash: r.safeString(userDB.PasswordHash),
-		Role:         r.safeString(userDB.Role),
+		PasswordHash: converters.SafeString(userDB.PasswordHash),
+		Role:         converters.SafeString(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -131,8 +126,8 @@ func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) 
 		Name:         userDB.Name,
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
-		PasswordHash: r.safeString(userDB.PasswordHash),
-		Role:         r.safeString(userDB.Role),
+		PasswordHash: converters.SafeString(userDB.PasswordHash),
+		Role:         converters.SafeString(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -149,8 +144,8 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (do
 		Name:         userDB.Name,
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
-		PasswordHash: r.safeString(userDB.PasswordHash),
-		Role:         r.safeString(userDB.Role),
+		PasswordHash: converters.SafeString(userDB.PasswordHash),
+		Role:         converters.SafeString(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil

@@ -23,4 +23,4 @@ func (s *Sender) Send(ctx context.Context, message notifier.Message) error {
 
 	_, err := s.bot.Send(msg)
 	return err
-}	
+}

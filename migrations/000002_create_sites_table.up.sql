@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS sites (
     last_status_code INT,
     last_checked_at TIMESTAMPTZ,
     response_time_ms INT,
-    is_active BOOLEAN DEFAULT TRUE,
+    is_active BOOLEAN DEFAULT FALSE,
     verified_at TIMESTAMPTZ,
     verification_token VARCHAR(64),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
