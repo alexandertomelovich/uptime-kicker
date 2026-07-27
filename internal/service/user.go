@@ -80,10 +80,12 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 		//НУЖНО РАЗОБРАТЬСЯ С CREATED and UPDATED TIME!!!!!!!!!!!!!!!
 	}
 
-	_, err = s.repo.Create(ctx, user)
+	userID, err := s.repo.Create(ctx, user)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("service.Register: %w", err)
 	}
+	
+	user.ID = userID
 
 	go s.sendWelcome(&user)
 

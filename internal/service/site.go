@@ -14,22 +14,25 @@ import (
 )
 
 var (
-	ErrSiteNotFound      = errors.New("site not found")
-	ErrSiteNotBelongUser = errors.New("site does not belong to user")
-	ErrInvalidToken      = errors.New("invalid verification token")
+	ErrSiteNotFound        = errors.New("site not found")
+	ErrSiteNotBelongUser   = errors.New("site does not belong to user")
+	ErrInvalidToken        = errors.New("invalid verification token")
 	ErrSiteAlreadyVerified = errors.New("site already verified")
-	ErrSiteNotVerified   = errors.New("site not verified")
-	ErrSiteNotActive     = errors.New("site not active")
-	ErrTokenGeneration   = errors.New("failed to generate verification token")
+	ErrSiteNotVerified     = errors.New("site not verified")
+	ErrSiteNotActive       = errors.New("site not active")
+	ErrTokenGeneration     = errors.New("failed to generate verification token")
+	ErrAccessDenied        = errors.New("access denied: insufficient permissions")
 )
 
 type SiteService struct {
-	repo repository.SiteRepository
+	repo     repository.SiteRepository
+	userRepo repository.UserRepository
 }
 
-func NewSiteService(repo repository.SiteRepository) *SiteService {
+func NewSiteService(repo repository.SiteRepository, userRepo repository.UserRepository) *SiteService {
 	return &SiteService{
-		repo: repo,
+		repo:     repo,
+		userRepo: userRepo,
 	}
 }
 
@@ -111,7 +114,14 @@ func (s *SiteService) GetActiveSitesByStatus(ctx context.Context, status domain.
 	return sites, nil
 }
 
-func (s *SiteService) GetAllSites(ctx context.Context) ([]domain.Site, error) {
+func (s *SiteService) GetAllSites(ctx context.Context, userID uuid.UUID) ([]domain.Site, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if user.Role != "admin" {
+		return nil, ErrAccessDenied
+	}
 
 	sites, err := s.repo.GetAllSites(ctx)
 	if err != nil {
@@ -120,12 +130,17 @@ func (s *SiteService) GetAllSites(ctx context.Context) ([]domain.Site, error) {
 	return sites, nil
 }
 
-func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Site, error) {
+func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error) {
 	sites, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("service.GetByUserID: %w", err)
 	}
-	return sites, nil
+
+	responses := make([]domain.SiteResponse, len(sites))
+	for i, site := range sites {
+		responses[i] = site.ToResponse()
+	}
+	return responses, nil
 }
 
 func (s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
