@@ -39,3 +39,34 @@ type SiteStats struct {
 	AvgResponseTime float64 `json:"avg_response_time"`
 }
 
+type SiteResponse struct {
+    ID                   uuid.UUID  `json:"id"`
+    Url                  string     `json:"url"`
+    Name                 string     `json:"name"`
+    CheckIntervalSeconds int        `json:"check_interval_seconds"`
+    UserID               uuid.UUID  `json:"user_id"`
+    Status               SiteStatus `json:"status"`
+    IsActive             bool       `json:"is_active"`
+    VerifiedAt           *time.Time `json:"verified_at,omitempty"`
+    LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
+    LastStatusCode       *int32     `json:"last_status_code,omitempty"`
+    CreatedAt            time.Time  `json:"created_at"`
+    UpdatedAt            time.Time  `json:"updated_at"`
+}
+
+func (s Site) ToResponse() SiteResponse {
+    return SiteResponse{
+        ID:                   s.ID,
+        Url:                  s.Url,
+        Name:                 s.Name,
+        CheckIntervalSeconds: s.CheckIntervalSeconds,
+        UserID:               s.UserID,
+        Status:               s.Status,
+        IsActive:             s.IsActive,
+        VerifiedAt:           s.VerifiedAt,
+        LastCheckedAt:        s.LastCheckedAt,
+        LastStatusCode:       s.LastStatusCode,
+        CreatedAt:            s.CreatedAt,
+        UpdatedAt:            s.UpdatedAt,
+    }
+}

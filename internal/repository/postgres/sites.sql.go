@@ -24,11 +24,9 @@ INSERT INTO sites (
     response_time_ms,
     is_active,
     verified_at,
-    verification_token,
-    created_at,
-    updated_at
+    verification_token
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING id
 `
@@ -45,8 +43,6 @@ type CreateSiteParams struct {
 	IsActive             *bool              `json:"is_active"`
 	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
 	VerificationToken    *string            `json:"verification_token"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error) {
@@ -62,16 +58,15 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UU
 		arg.IsActive,
 		arg.VerifiedAt,
 		arg.VerificationToken,
-		arg.CreatedAt,
-		arg.UpdatedAt,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
 }
 
-const deleteSite = `-- name: DeleteSite :exec
+const deleteSite = `-- name: DeleteSite :one
 DELETE FROM sites WHERE id = $1 AND user_id = $2
+RETURNING id
 `
 
 type DeleteSiteParams struct {
@@ -79,9 +74,11 @@ type DeleteSiteParams struct {
 	UserID uuid.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteSite(ctx context.Context, arg DeleteSiteParams) error {
-	_, err := q.db.Exec(ctx, deleteSite, arg.ID, arg.UserID)
-	return err
+func (q *Queries) DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteSite, arg.ID, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getActiveSitesByStatus = `-- name: GetActiveSitesByStatus :many
@@ -454,10 +451,18 @@ SET
 WHERE id = $5
 RETURNING 
     id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
     status,
     last_status_code,
     last_checked_at,
     response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
     updated_at
 `
 
@@ -469,16 +474,7 @@ type UpdateSiteStatusParams struct {
 	ID             uuid.UUID          `json:"id"`
 }
 
-type UpdateSiteStatusRow struct {
-	ID             uuid.UUID          `json:"id"`
-	Status         *string            `json:"status"`
-	LastStatusCode *int32             `json:"last_status_code"`
-	LastCheckedAt  pgtype.Timestamptz `json:"last_checked_at"`
-	ResponseTimeMs *int32             `json:"response_time_ms"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (UpdateSiteStatusRow, error) {
+func (q *Queries) UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (Site, error) {
 	row := q.db.QueryRow(ctx, updateSiteStatus,
 		arg.Status,
 		arg.LastStatusCode,
@@ -486,13 +482,77 @@ func (q *Queries) UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusPara
 		arg.ResponseTimeMs,
 		arg.ID,
 	)
-	var i UpdateSiteStatusRow
+	var i Site
 	err := row.Scan(
 		&i.ID,
+		&i.Url,
+		&i.Name,
+		&i.CheckIntervalSeconds,
+		&i.UserID,
 		&i.Status,
 		&i.LastStatusCode,
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
+		&i.IsActive,
+		&i.VerifiedAt,
+		&i.VerificationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const verifySite = `-- name: VerifySite :one
+UPDATE sites
+SET
+    status = 'up',
+    is_active = true,
+    verified_at = NOW(),
+    verification_token = NULL,
+    updated_at = NOW()
+WHERE id = $1
+  AND user_id = $2
+  AND verification_token = $3
+RETURNING
+    id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
+    status,
+    last_status_code,
+    last_checked_at,
+    response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
+    updated_at
+`
+
+type VerifySiteParams struct {
+	ID                uuid.UUID `json:"id"`
+	UserID            uuid.UUID `json:"user_id"`
+	VerificationToken *string   `json:"verification_token"`
+}
+
+func (q *Queries) VerifySite(ctx context.Context, arg VerifySiteParams) (Site, error) {
+	row := q.db.QueryRow(ctx, verifySite, arg.ID, arg.UserID, arg.VerificationToken)
+	var i Site
+	err := row.Scan(
+		&i.ID,
+		&i.Url,
+		&i.Name,
+		&i.CheckIntervalSeconds,
+		&i.UserID,
+		&i.Status,
+		&i.LastStatusCode,
+		&i.LastCheckedAt,
+		&i.ResponseTimeMs,
+		&i.IsActive,
+		&i.VerifiedAt,
+		&i.VerificationToken,
+		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err

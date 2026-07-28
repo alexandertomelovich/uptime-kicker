@@ -4,80 +4,92 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository"
+	"health_checker/internal/repository/converters"
+	"health_checker/internal/repository/postgres"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+var (
+	ErrSiteNotFound        = errors.New("site not found")
+	ErrSiteNotBelongUser   = errors.New("site does not belong to user")
+	ErrInvalidToken        = errors.New("invalid verification token")
+	ErrSiteAlreadyVerified = errors.New("site already verified")
+	ErrSiteNotVerified     = errors.New("site not verified")
+	ErrSiteNotActive       = errors.New("site not active")
+	ErrTokenGeneration     = errors.New("failed to generate verification token")
+	ErrAccessDenied        = errors.New("access denied: insufficient permissions")
+)
+
 type SiteService struct {
-	repo repository.SiteRepository
+	repo     repository.SiteRepository
+	userRepo repository.UserRepository
 }
 
-func NewSiteService(repo repository.SiteRepository) *SiteService {
+func NewSiteService(repo repository.SiteRepository, userRepo repository.UserRepository) *SiteService {
 	return &SiteService{
-		repo: repo,
+		repo:     repo,
+		userRepo: userRepo,
 	}
 }
 
 type CreateSiteRequest struct {
-	Url                  string            `json:"url"`
-	Name                 string            `json:"name"`
-	CheckIntervalSeconds int               `json:"check_interval_seconds"`
-	UserID               uuid.UUID         `json:"user_id"`
+	Url                  string `json:"url"`
+	Name                 string `json:"name"`
+	CheckIntervalSeconds int    `json:"check_interval_seconds"`
 }
 
-func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest) error {
+func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
 	if req.CheckIntervalSeconds < 30 {
 		req.CheckIntervalSeconds = 30
 	}
-	
+
 	token, err := generateVerificationToken()
 	if err != nil {
-		return fmt.Errorf("getenate token error: %w", err)
+		return domain.Site{}, fmt.Errorf("%w: %v", ErrTokenGeneration, err)
 	}
 
 	site := domain.Site{
-		Url: req.Url,
-		Name: req.Name,
+		Url:                  req.Url,
+		Name:                 req.Name,
 		CheckIntervalSeconds: req.CheckIntervalSeconds,
-		UserID: req.UserID,
-		Status: "pending",
-		VerificationToken: token,
-		IsActive: false,
+		UserID:               userID,
+		Status:               "pending",
+		VerificationToken:    token,
+		IsActive:             false,
 	}
 	_, err = s.repo.Create(ctx, site)
 	if err != nil {
-		return fmt.Errorf("service.Create: %w", err)
+		return domain.Site{}, fmt.Errorf("service.Create: %w", err)
 	}
-	return nil
+	return site, nil
 }
 
 func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("site not found")
+		return ErrSiteNotFound
 	}
 
 	if site.UserID != userID {
-		return fmt.Errorf("site does not belong to user")
+		return ErrSiteNotBelongUser
 	}
 
-	if token != site.VerificationToken {
-		return fmt.Errorf("invalid verification token")
+	if site.VerifiedAt != nil {
+		return ErrSiteAlreadyVerified
 	}
 
-	now := time.Now()
-
-	site.IsActive = true
-	site.VerifiedAt = &now
-	site.UpdatedAt = now
-	
-	_, err = s.repo.Update(ctx, site)
+	_, err = s.repo.VerifySite(ctx, id, userID, token)
 	if err != nil {
-		return fmt.Errorf("service.Update: %w", err)
+		if errors.Is(err, repository.ErrInvalidVerificationToken) {
+			return ErrInvalidToken
+		}
+		return fmt.Errorf("service.VerifySite: %w", err)
 	}
 	return nil
 }
@@ -85,46 +97,61 @@ func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, toke
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return fmt.Errorf("site not found")
+		return ErrSiteNotFound
 	}
 	if site.UserID != userID {
-		return fmt.Errorf("site does not belong to user")
-		//имеет смысл написать список ошибок через var()
+		return ErrSiteNotBelongUser
 	}
 	if err := s.repo.Delete(ctx, id, userID); err != nil {
+		if errors.Is(err, repository.ErrSiteNotFound) {
+			return ErrSiteNotFound
+		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
 	return nil
 }
 
-func(s *SiteService) GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error) {
+func (s *SiteService) GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error) {
 	sites, err := s.repo.GetActiveSitesByStatus(ctx, status)
 	if err != nil {
-		return nil,  fmt.Errorf("service.GetActiveSitesByStatus: %w", err)
+		return nil, fmt.Errorf("service.GetActiveSitesByStatus: %w", err)
 	}
 	return sites, nil
 }
 
-func(s *SiteService) GetAllSites(ctx context.Context) ([]domain.Site, error) {
+func (s *SiteService) GetAllSites(ctx context.Context, userID uuid.UUID) ([]domain.Site, error) {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+	if user.Role != "admin" {
+		return nil, ErrAccessDenied
+	}
+
 	sites, err := s.repo.GetAllSites(ctx)
 	if err != nil {
-		return nil,  fmt.Errorf("service.GetAllSites: %w", err)
+		return nil, fmt.Errorf("service.GetAllSites: %w", err)
 	}
 	return sites, nil
 }
 
-func(s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.Site, error) {
+func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error) {
 	sites, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("service.GetByUserID: %w", err)
 	}
-	return sites, nil
+
+	responses := make([]domain.SiteResponse, len(sites))
+	for i, site := range sites {
+		responses[i] = site.ToResponse()
+	}
+	return responses, nil
 }
 
-func(s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+func (s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.Site{}, fmt.Errorf("service.GetByID: %w", err)
+		return domain.Site{}, ErrSiteNotFound
 	}
 	return site, nil
 }
@@ -137,7 +164,7 @@ func (s *SiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domai
 	return stats, nil
 }
 
-func(s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
+func (s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
 	sites, err := s.repo.GetSitesNeedingCheck(ctx, limit)
 	if err != nil {
 		return nil, fmt.Errorf("service.GetSitesNeedingCheck: %w", err)
@@ -145,34 +172,87 @@ func(s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]dom
 	return sites, nil
 }
 
-func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
-    site, err := s.repo.GetByID(ctx, siteID)
-    if err != nil {
-        return domain.Site{}, fmt.Errorf("site not found")
-    }
-    
-    if site.VerifiedAt == nil {
-        return domain.Site{}, fmt.Errorf("not verified")
-    }
+func (s *SiteService) UpdateStatus(
+	ctx context.Context,
+	siteID, userID uuid.UUID,
+	newStatus domain.SiteStatus,
+	statusCode int32,
+	responseTimeMs *int,
+) (domain.Site, error) {
+	site, err := s.repo.GetByID(ctx, siteID)
+	if err != nil {
+		return domain.Site{}, ErrSiteNotFound
+	}
+
+	if site.UserID != userID {
+		return domain.Site{}, ErrSiteNotBelongUser
+	}
+
+	if site.VerifiedAt == nil {
+		return domain.Site{}, ErrSiteNotVerified
+	}
 
 	if !site.IsActive {
-        return domain.Site{}, fmt.Errorf("not active")
-    }
+		return domain.Site{}, ErrSiteNotActive
+	}
 
-    if site.UserID != userID {
-        return domain.Site{}, fmt.Errorf("site does not belong to user")
-    }
-    now := time.Now()
-    site.Status = newStatus
-    site.LastCheckedAt = &now
-    site.LastStatusCode = &statusCode
-    
-    updatedSite, err := s.repo.UpdateSiteStatus(ctx, site)
-    if err != nil {
-        return domain.Site{}, fmt.Errorf("service.UpdateSiteStatus: %w", err)
-    }
-    
-    return updatedSite, nil
+	return s.updateStatusInternal(ctx, site, newStatus, statusCode, responseTimeMs)
+}
+
+func (s *SiteService) updateStatusInternal(
+	ctx context.Context,
+	site domain.Site,
+	newStatus domain.SiteStatus,
+	statusCode int32,
+	responseTimeMs *int,
+) (domain.Site, error) {
+	now := time.Now()
+	statusStr := string(newStatus)
+
+	params := postgres.UpdateSiteStatusParams{
+		Status:         &statusStr,
+		LastStatusCode: &statusCode,
+		LastCheckedAt:  converters.TimeToPgTimestamp(&now),
+		ResponseTimeMs: converters.IntPtrToInt32Ptr(responseTimeMs),
+		ID:             site.ID,
+	}
+
+	updatedSite, err := s.repo.UpdateSiteStatus(ctx, params)
+	if err != nil {
+		return domain.Site{}, fmt.Errorf("service.updateStatusInternal: %w", err)
+	}
+
+	return updatedSite, nil
+}
+
+func (s *SiteService) UpdateStatusByID(
+	ctx context.Context, 
+	siteID uuid.UUID, 
+	newStatus domain.SiteStatus, 
+	statusCode int32,responseTimeMs *int,
+) (domain.Site, error) {
+	site, err := s.repo.GetByID(ctx, siteID)
+	if err != nil {
+		return domain.Site{}, ErrSiteNotFound
+	}
+
+	now := time.Now()
+	statusStr := string(newStatus)
+
+	params := postgres.UpdateSiteStatusParams{
+		Status:         &statusStr,
+		LastStatusCode: &statusCode,
+		LastCheckedAt:  converters.TimeToPgTimestamp(&now),
+		ResponseTimeMs: converters.IntPtrToInt32Ptr(responseTimeMs),
+		ID:             site.ID,
+	}
+
+	updatedSite, err := s.repo.UpdateSiteStatus(ctx, params)
+	if err != nil {
+		return domain.Site{}, fmt.Errorf("service.UpdateStatusByID: %w", err)
+	}
+
+	return updatedSite, nil
 }
 
 func generateVerificationToken() (string, error) {
