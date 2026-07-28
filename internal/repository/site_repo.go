@@ -14,7 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var ErrInvalidVerificationToken = errors.New("invalid verification token")
+var (
+	ErrInvalidVerificationToken = errors.New("invalid verification token")
+	ErrSiteNotFound             = errors.New("site not found")
+)
 
 type SiteRepository struct {
 	queries *postgres.Queries
@@ -73,9 +76,14 @@ func (r *SiteRepository) Delete(ctx context.Context, id, user_id uuid.UUID) erro
 		ID:     id,
 		UserID: user_id,
 	}
-	if err := r.queries.DeleteSite(ctx, params); err != nil {
+	_, err := r.queries.DeleteSite(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrSiteNotFound
+		}
 		return fmt.Errorf("repository.DeleteSite: %w", err)
 	}
+
 	return nil
 }
 

@@ -16,8 +16,9 @@ INSERT INTO sites (
 )
 RETURNING id;
 
--- name: DeleteSite :exec
-DELETE FROM sites WHERE id = $1 AND user_id = $2;
+-- name: DeleteSite :one
+DELETE FROM sites WHERE id = $1 AND user_id = $2
+RETURNING id;
 
 -- name: GetAllSites :many
 SELECT id,

@@ -101,6 +101,9 @@ func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 		return ErrSiteNotBelongUser
 	}
 	if err := s.repo.Delete(ctx, id, userID); err != nil {
+		if errors.Is(err, repository.ErrSiteNotFound) {
+            return ErrSiteNotFound
+        }
 		return fmt.Errorf("service.Delete: %w", err)
 	}
 	return nil
@@ -173,6 +176,10 @@ func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID
 		return domain.Site{}, ErrSiteNotFound
 	}
 
+	if site.UserID != userID {
+		return domain.Site{}, ErrSiteNotBelongUser
+	}
+
 	if site.VerifiedAt == nil {
 		return domain.Site{}, ErrSiteNotVerified
 	}
@@ -181,9 +188,10 @@ func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID
 		return domain.Site{}, ErrSiteNotActive
 	}
 
-	if site.UserID != userID {
-		return domain.Site{}, ErrSiteNotBelongUser
-	}
+	return s.updateStatusInternal(ctx, site, newStatus, statusCode)
+}
+
+func (s *SiteService) updateStatusInternal(ctx context.Context, site domain.Site, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
 	now := time.Now()
 	site.Status = newStatus
 	site.LastCheckedAt = &now
@@ -191,7 +199,26 @@ func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID
 
 	updatedSite, err := s.repo.UpdateSiteStatus(ctx, site)
 	if err != nil {
-		return domain.Site{}, fmt.Errorf("service.UpdateSiteStatus: %w", err)
+		return domain.Site{}, fmt.Errorf("service.updateStatusInternal: %w", err)
+	}
+
+	return updatedSite, nil
+}
+
+func (s *SiteService) UpdateStatusByID(ctx context.Context, siteID uuid.UUID, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
+	site, err := s.repo.GetByID(ctx, siteID)
+	if err != nil {
+		return domain.Site{}, ErrSiteNotFound
+	}
+
+	now := time.Now()
+	site.Status = newStatus
+	site.LastCheckedAt = &now
+	site.LastStatusCode = &statusCode
+
+	updatedSite, err := s.repo.UpdateSiteStatus(ctx, site)
+	if err != nil {
+		return domain.Site{}, fmt.Errorf("service.UpdateStatusByID: %w", err)
 	}
 
 	return updatedSite, nil

@@ -2,13 +2,17 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/converters"
 	"health_checker/internal/repository/postgres"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
+
+var ErrUserNotFound = errors.New("user not found")
 
 type UserRepository struct {
 	queries *postgres.Queries
@@ -52,7 +56,11 @@ func (r *UserRepository) Create(ctx context.Context, user domain.User) (uuid.UUI
 }
 
 func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	if err := r.queries.DeleteUser(ctx, id); err != nil {
+	_, err := r.queries.DeleteUser(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+            return ErrUserNotFound
+        }
 		return fmt.Errorf("repository.DeleteUser: %w", err)
 	}
 	return nil

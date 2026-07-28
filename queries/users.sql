@@ -78,5 +78,7 @@ SET
 WHERE id = $5
 RETURNING id;
 
--- name: DeleteUser :exec
-DELETE FROM users WHERE id = $1;
+-- name: DeleteUser :one
+DELETE FROM users 
+WHERE id = $1
+RETURNING id;

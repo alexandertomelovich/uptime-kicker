@@ -64,8 +64,9 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UU
 	return id, err
 }
 
-const deleteSite = `-- name: DeleteSite :exec
+const deleteSite = `-- name: DeleteSite :one
 DELETE FROM sites WHERE id = $1 AND user_id = $2
+RETURNING id
 `
 
 type DeleteSiteParams struct {
@@ -73,9 +74,11 @@ type DeleteSiteParams struct {
 	UserID uuid.UUID `json:"user_id"`
 }
 
-func (q *Queries) DeleteSite(ctx context.Context, arg DeleteSiteParams) error {
-	_, err := q.db.Exec(ctx, deleteSite, arg.ID, arg.UserID)
-	return err
+func (q *Queries) DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteSite, arg.ID, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getActiveSitesByStatus = `-- name: GetActiveSitesByStatus :many

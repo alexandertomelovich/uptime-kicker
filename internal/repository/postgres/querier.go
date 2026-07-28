@@ -13,8 +13,8 @@ import (
 type Querier interface {
 	CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error)
-	DeleteSite(ctx context.Context, arg DeleteSiteParams) error
-	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UUID, error)
+	DeleteUser(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	GetActiveSitesByStatus(ctx context.Context, status *string) ([]Site, error)
 	GetAllSites(ctx context.Context) ([]Site, error)
 	GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error)
