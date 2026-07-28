@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository"
+	"health_checker/internal/repository/converters"
+	"health_checker/internal/repository/postgres"
 	"time"
 
 	"github.com/google/uuid"
@@ -102,8 +104,8 @@ func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	}
 	if err := s.repo.Delete(ctx, id, userID); err != nil {
 		if errors.Is(err, repository.ErrSiteNotFound) {
-            return ErrSiteNotFound
-        }
+			return ErrSiteNotFound
+		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
 	return nil
@@ -170,7 +172,13 @@ func (s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]do
 	return sites, nil
 }
 
-func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
+func (s *SiteService) UpdateStatus(
+	ctx context.Context,
+	siteID, userID uuid.UUID,
+	newStatus domain.SiteStatus,
+	statusCode int32,
+	responseTimeMs *int,
+) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
 		return domain.Site{}, ErrSiteNotFound
@@ -188,16 +196,28 @@ func (s *SiteService) UpdateStatus(ctx context.Context, siteID, userID uuid.UUID
 		return domain.Site{}, ErrSiteNotActive
 	}
 
-	return s.updateStatusInternal(ctx, site, newStatus, statusCode)
+	return s.updateStatusInternal(ctx, site, newStatus, statusCode, responseTimeMs)
 }
 
-func (s *SiteService) updateStatusInternal(ctx context.Context, site domain.Site, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
+func (s *SiteService) updateStatusInternal(
+	ctx context.Context,
+	site domain.Site,
+	newStatus domain.SiteStatus,
+	statusCode int32,
+	responseTimeMs *int,
+) (domain.Site, error) {
 	now := time.Now()
-	site.Status = newStatus
-	site.LastCheckedAt = &now
-	site.LastStatusCode = &statusCode
+	statusStr := string(newStatus)
 
-	updatedSite, err := s.repo.UpdateSiteStatus(ctx, site)
+	params := postgres.UpdateSiteStatusParams{
+		Status:         &statusStr,
+		LastStatusCode: &statusCode,
+		LastCheckedAt:  converters.TimeToPgTimestamp(&now),
+		ResponseTimeMs: converters.IntPtrToInt32Ptr(responseTimeMs),
+		ID:             site.ID,
+	}
+
+	updatedSite, err := s.repo.UpdateSiteStatus(ctx, params)
 	if err != nil {
 		return domain.Site{}, fmt.Errorf("service.updateStatusInternal: %w", err)
 	}
@@ -205,18 +225,29 @@ func (s *SiteService) updateStatusInternal(ctx context.Context, site domain.Site
 	return updatedSite, nil
 }
 
-func (s *SiteService) UpdateStatusByID(ctx context.Context, siteID uuid.UUID, newStatus domain.SiteStatus, statusCode int32) (domain.Site, error) {
+func (s *SiteService) UpdateStatusByID(
+	ctx context.Context, 
+	siteID uuid.UUID, 
+	newStatus domain.SiteStatus, 
+	statusCode int32,responseTimeMs *int,
+) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
 		return domain.Site{}, ErrSiteNotFound
 	}
 
 	now := time.Now()
-	site.Status = newStatus
-	site.LastCheckedAt = &now
-	site.LastStatusCode = &statusCode
+	statusStr := string(newStatus)
 
-	updatedSite, err := s.repo.UpdateSiteStatus(ctx, site)
+	params := postgres.UpdateSiteStatusParams{
+		Status:         &statusStr,
+		LastStatusCode: &statusCode,
+		LastCheckedAt:  converters.TimeToPgTimestamp(&now),
+		ResponseTimeMs: converters.IntPtrToInt32Ptr(responseTimeMs),
+		ID:             site.ID,
+	}
+
+	updatedSite, err := s.repo.UpdateSiteStatus(ctx, params)
 	if err != nil {
 		return domain.Site{}, fmt.Errorf("service.UpdateStatusByID: %w", err)
 	}

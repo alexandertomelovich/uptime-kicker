@@ -7,11 +7,9 @@ import (
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/converters"
 	"health_checker/internal/repository/postgres"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -36,10 +34,10 @@ func (r *SiteRepository) toDomain(siteDB postgres.Site) domain.Site {
 		UserID:               siteDB.UserID,
 		Status:               domain.SiteStatus(converters.SafeString(siteDB.Status)),
 		LastStatusCode:       siteDB.LastStatusCode,
-		LastCheckedAt:        r.pgTimestampToPtr(siteDB.LastCheckedAt),
+		LastCheckedAt:        converters.PgTimestampToPtr(siteDB.LastCheckedAt),
 		ResponseTimeMs:       siteDB.ResponseTimeMs,
 		IsActive:             converters.SafeBool(siteDB.IsActive),
-		VerifiedAt:           r.pgTimestampToPtr(siteDB.VerifiedAt),
+		VerifiedAt:           converters.PgTimestampToPtr(siteDB.VerifiedAt),
 		VerificationToken:    converters.SafeString(siteDB.VerificationToken),
 		CreatedAt:            siteDB.CreatedAt.Time,
 		UpdatedAt:            siteDB.UpdatedAt.Time,
@@ -54,11 +52,11 @@ func (r *SiteRepository) fromDomain(site domain.Site) postgres.CreateSiteParams 
 		UserID:               site.UserID,
 		Status:               (*string)(&site.Status),
 		LastStatusCode:       site.LastStatusCode,
-		LastCheckedAt:        r.timeToPgTimestamp(site.LastCheckedAt),
+		LastCheckedAt:        converters.TimeToPgTimestamp(site.LastCheckedAt),
 		ResponseTimeMs:       site.ResponseTimeMs,
 		IsActive:             &site.IsActive,
 		VerificationToken:    &site.VerificationToken,
-		VerifiedAt:           r.timeToPgTimestamp(site.VerifiedAt),
+		VerifiedAt:           converters.TimeToPgTimestamp(site.VerifiedAt),
 	}
 }
 
@@ -148,27 +146,13 @@ func (r *SiteRepository) GetSitesNeedingCheck(ctx context.Context, limit int) ([
 	return r.toDomainSlice(sitesDB), nil
 }
 
-func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, site domain.Site) (domain.Site, error) {
-	params := postgres.UpdateSiteStatusParams{
-		Status:         (*string)(&site.Status),
-		LastStatusCode: site.LastStatusCode,
-		LastCheckedAt:  r.timeToPgTimestamp(site.LastCheckedAt),
-		ResponseTimeMs: site.ResponseTimeMs,
-		ID:             site.ID,
-	}
-
+func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error) {
 	updated, err := r.queries.UpdateSiteStatus(ctx, params)
 	if err != nil {
 		return domain.Site{}, fmt.Errorf("repository.UpdateSiteStatus: %w", err)
 	}
 
-	site.Status = domain.SiteStatus(converters.SafeString(updated.Status))
-	site.LastStatusCode = updated.LastStatusCode
-	site.LastCheckedAt = r.pgTimestampToPtr(updated.LastCheckedAt)
-	site.ResponseTimeMs = updated.ResponseTimeMs
-	site.UpdatedAt = updated.UpdatedAt.Time
-
-	return site, nil
+	return r.toDomain(updated), nil
 }
 
 func (r *SiteRepository) Update(ctx context.Context, site domain.Site) (domain.Site, error) {
@@ -220,18 +204,4 @@ func (r *SiteRepository) toDomainSlice(sitesDB []postgres.Site) []domain.Site {
 		sites[i] = r.toDomain(site)
 	}
 	return sites
-}
-
-func (r *SiteRepository) pgTimestampToPtr(t pgtype.Timestamptz) *time.Time {
-	if !t.Valid {
-		return nil
-	}
-	return &t.Time
-}
-
-func (r *SiteRepository) timeToPgTimestamp(t *time.Time) pgtype.Timestamptz {
-	if t == nil {
-		return pgtype.Timestamptz{Valid: false}
-	}
-	return pgtype.Timestamptz{Time: *t, Valid: true}
 }

@@ -27,7 +27,7 @@ type Querier interface {
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (GetSiteStatsRow, error)
 	GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site, error)
 	UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, error)
-	UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (UpdateSiteStatusRow, error)
+	UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (Site, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (uuid.UUID, error)
 	VerifySite(ctx context.Context, arg VerifySiteParams) (Site, error)
 }

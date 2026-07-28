@@ -127,10 +127,18 @@ SET
 WHERE id = $5
 RETURNING 
     id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
     status,
     last_status_code,
     last_checked_at,
     response_time_ms,
+    is_active,
+    verified_at,
+    verification_token,
+    created_at,
     updated_at;
 
 -- name: UpdateSite :one
