@@ -120,9 +120,9 @@ LIMIT $1;
 UPDATE sites
 SET 
     status = COALESCE($1, status),
-    last_status_code = COALESCE($2, last_status_code),
-    last_checked_at = COALESCE($3, last_checked_at),
-    response_time_ms = COALESCE($4, response_time_ms),
+    last_status_code = $2,
+    last_checked_at = $3,
+    response_time_ms = $4,
     updated_at = NOW()
 WHERE id = $5
 RETURNING 
