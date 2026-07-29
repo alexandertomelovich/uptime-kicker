@@ -13,6 +13,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+
+
 type UserService struct {
 	repo  repository.UserRepository
 	notif notifier.Sender
@@ -76,7 +78,6 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 		TelegramID:   req.TelegramID,
 		PasswordHash: string(passwordHash),
 		Role:         req.Role,
-		//НУЖНО РАЗОБРАТЬСЯ С CREATED and UPDATED TIME!!!!!!!!!!!!!!!
 	}
 
 	userID, err := s.repo.Create(ctx, user)
@@ -100,7 +101,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (domain
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return domain.User{}, fmt.Errorf("invalid credentials")
 	}
-	//......
+	
 }
 
 func (s *UserService) sendWelcome(user *domain.User) {
