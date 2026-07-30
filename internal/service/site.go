@@ -122,7 +122,7 @@ func (s *SiteService) GetActiveSitesByStatus(ctx context.Context, status domain.
 func (s *SiteService) GetAllSites(ctx context.Context, userID uuid.UUID) ([]domain.Site, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user: %w", err)
+		return nil, fmt.Errorf("failed to get sites: %w", err)
 	}
 	if user.Role != "admin" {
 		return nil, ErrAccessDenied
