@@ -59,8 +59,8 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.queries.DeleteUser(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-            return ErrUserNotFound
-        }
+			return ErrUserNotFound
+		}
 		return fmt.Errorf("repository.DeleteUser: %w", err)
 	}
 	return nil
