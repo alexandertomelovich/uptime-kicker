@@ -9,6 +9,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CheckDailyStat struct {
+	ID               int64          `json:"id"`
+	SiteID           uuid.UUID      `json:"site_id"`
+	Date             pgtype.Date    `json:"date"`
+	TotalChecks      int32          `json:"total_checks"`
+	FailedChecks     int32          `json:"failed_checks"`
+	AvgLatencyMs     int32          `json:"avg_latency_ms"`
+	MaxLatencyMs     int32          `json:"max_latency_ms"`
+	UptimePercentage pgtype.Numeric `json:"uptime_percentage"`
+}
+
+type CheckLogsRaw struct {
+	ID           int64              `json:"id"`
+	SiteID       uuid.UUID          `json:"site_id"`
+	StatusCode   int32              `json:"status_code"`
+	LatencyMs    int32              `json:"latency_ms"`
+	ErrorMessage *string            `json:"error_message"`
+	CheckedAt    pgtype.Timestamptz `json:"checked_at"`
+}
+
 type Site struct {
 	ID                   uuid.UUID          `json:"id"`
 	Url                  string             `json:"url"`

@@ -1,6 +1,7 @@
 package converters
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,4 +41,31 @@ func IntPtrToInt32Ptr(i *int) *int32 {
     }
     v := int32(*i)
     return &v
+}
+
+func NumericToFloat64(n pgtype.Numeric) float64 {
+    if !n.Valid {
+        return 0
+    }
+
+    var s string
+    err := n.Scan(&s)
+    if err != nil {
+        return 0
+    }
+
+    var f float64
+    _, err = fmt.Sscan(s, &f)
+    return f
+}
+
+func Float64ToNumeric(f float64) pgtype.Numeric {
+    var n pgtype.Numeric
+    
+    err := n.Scan(fmt.Sprintf("%f", f))
+    if err != nil {
+        return pgtype.Numeric{}
+    }
+    
+    return n
 }
