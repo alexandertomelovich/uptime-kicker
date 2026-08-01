@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	AggregateDailyStats(ctx context.Context) error
+	ClearLogs(ctx context.Context) error
 	CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error)
 	DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UUID, error)
