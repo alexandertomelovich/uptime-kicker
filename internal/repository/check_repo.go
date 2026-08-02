@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"health_checker/internal/domain"
 	"health_checker/internal/repository/converters"
 	"health_checker/internal/repository/postgres"
@@ -58,5 +59,20 @@ func (r *CheckRepository) fromDomain(stat domain.CheckDailyStat) postgres.CheckD
 		UptimePercentage: converters.Float64ToNumeric(stat.UptimePercentage),
 	}
 }
+
+func (r *CheckRepository) AggregateDailyStats(ctx context.Context) error {
+	if err := r.queries.AggregateDailyStats(ctx); err != nil {
+		return fmt.Errorf("repository.AAggregateDailyStats: %w", err)
+	}
+	return nil
+}
+
+func (r *CheckRepository) ClearLogs(ctx context.Context)error {
+	if err := r.queries.ClearLogs(ctx); err != nil {
+		return fmt.Errorf("repository.ClearLogs: %w", err)
+	}
+	return nil
+}
+
 
 

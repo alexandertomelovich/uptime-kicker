@@ -6,9 +6,10 @@ require (
 	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
+	github.com/robfig/cron v1.2.0
 )
 
-require github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
+require github.com/golang-jwt/jwt/v5 v5.3.1
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
