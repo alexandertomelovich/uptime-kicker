@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"health_checker/internal/notifier"
 	"health_checker/internal/repository"
+	"health_checker/internal/telegram"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,8 +25,8 @@ type CheckResult struct {
 }
 
 type CheckerService struct {
-	repo repository.SiteRepository
-	//нужно будет добавить для отправки уведомлений
+	repo        repository.SiteRepository
+	sender      telegram.Sender
 	numWorkers  int
 	limit       int
 	jobsChan    chan CheckJob
@@ -35,6 +38,7 @@ type CheckerService struct {
 
 func NewCheckerService(
 	repo repository.SiteRepository,
+	sender telegram.Sender,
 	numWorkers int,
 	limit int,
 	queueSize int,
@@ -42,6 +46,7 @@ func NewCheckerService(
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CheckerService{
 		repo:        repo,
+		sender:      sender,
 		numWorkers:  numWorkers,
 		limit:       limit,
 		jobsChan:    make(chan CheckJob, queueSize),
@@ -68,6 +73,9 @@ func (s *CheckerService) Stop() {
 	close(s.resultsChan)
 }
 
-func (s *CheckerService) sendStatusChangeAlert() {
-
+func (s *CheckerService) sendStatusChangeAlert(ctx context.Context, message notifier.Message) error {
+	if err := s.sender.Send(ctx, message); err != nil {
+		return fmt.Errorf("sendStatusChangeAlert: %w", err)
+	}
+	return nil
 }

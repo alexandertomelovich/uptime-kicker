@@ -21,7 +21,7 @@ SELECT id,
     updated_at
 FROM users ORDER BY created_at DESC;
 
--- name: GetByUsername :one
+-- name: GetUsersByName :many
 SELECT id,
     email,
     name,
@@ -30,7 +30,9 @@ SELECT id,
     role,
     created_at,
     updated_at
-FROM users WHERE name = $1 ORDER BY created_at DESC;
+FROM users 
+WHERE name = $1 
+ORDER BY created_at DESC;
 
 -- name: GetByID :one
 SELECT id,

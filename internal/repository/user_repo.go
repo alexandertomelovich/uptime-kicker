@@ -141,22 +141,26 @@ func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) 
 	}, nil
 }
 
-func (r *UserRepository) GetByUsername(ctx context.Context, username string) (domain.User, error) {
-	userDB, err := r.queries.GetByUsername(ctx, username)
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
+	usersDB, err := r.queries.GetUsersByName(ctx, username)
 	if err != nil {
-		return domain.User{}, fmt.Errorf("repository.GetByUsername: %w", err)
+		return nil, fmt.Errorf("repository.GetByUsername: %w", err)
 	}
+	users := make([]domain.User, len(usersDB))
 
-	return domain.User{
-		ID:           userDB.ID,
-		Name:         userDB.Name,
-		Email:        userDB.Email,
-		TelegramID:   userDB.TelegramID,
-		PasswordHash: converters.SafeString(userDB.PasswordHash),
-		Role:         converters.SafeString(userDB.Role),
-		CreatedAt:    userDB.CreatedAt.Time,
-		UpdatedAt:    userDB.UpdatedAt.Time,
-	}, nil
+	for i, userDB := range usersDB {
+		users[i] = domain.User{
+			ID:           userDB.ID,
+			Name:         userDB.Name,
+			Email:        userDB.Email,
+			TelegramID:   userDB.TelegramID,
+			PasswordHash: converters.SafeString(userDB.PasswordHash),
+			Role:         converters.SafeString(userDB.Role),
+			CreatedAt:    userDB.CreatedAt.Time,
+			UpdatedAt:    userDB.UpdatedAt.Time,
+		}
+	}
+	return users, nil
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
