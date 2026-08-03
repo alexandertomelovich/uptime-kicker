@@ -31,7 +31,7 @@ func (s *CheckerService) produceJobs() {
 		jobs[i] = CheckJob{
 			SiteID: site.ID,
 			URL: site.Url,
-			Interval: time.Duration(site.CheckIntervalSeconds),
+			Interval: time.Duration(site.CheckIntervalSeconds) * time.Second,
 		}
 	}
 
@@ -41,7 +41,7 @@ func (s *CheckerService) produceJobs() {
 			return
 		case s.jobsChan <- job:
 		default:
-			//...
+			log.Printf("WARNING: job queue is full, dropping job for site %s (ID: %s)", job.URL, job.SiteID)
 		}
 	}
 }

@@ -36,7 +36,7 @@ func (m *JWTManager) GenerateTokenPair(userID uuid.UUID, email string, role stri
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
 	}
 
-	refreshToken, err := m.generateRefreshToken(userID)
+	refreshToken, err := m.generateRefreshToken(userID, email, role, telegramID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate refresh token: %w", err)
 	}
@@ -67,9 +67,12 @@ func (m *JWTManager) generateAccessToken(userID uuid.UUID, email string, role st
 	return token.SignedString(m.accessSecret)
 }
 
-func (m *JWTManager) generateRefreshToken(userID uuid.UUID) (string, error) {
+func (m *JWTManager) generateRefreshToken(userID uuid.UUID, email, role string, telegramID int64) (string, error) {
 	claims := &Claims{
 		UserID: userID,
+		Email: email,
+		TelegramID: telegramID,
+		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

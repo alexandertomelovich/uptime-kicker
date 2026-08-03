@@ -105,7 +105,7 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 }
 
 func (s *UserService) Login(ctx context.Context, email, password string) (*auth.TokenPair, error) {
-	user, err := s.repo.GetByEmail(ctx, email)
+	user, err := s.repo.GetByEmail(ctx, strings.ToLower(email))
 	if err != nil {
 		return nil, fmt.Errorf("invalid credentials")
 	}
@@ -203,12 +203,12 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 	return user, nil
 }
 
-func (s *UserService) GetByUsername(ctx context.Context, username string) (domain.User, error) {
-	user, err := s.repo.GetByUsername(ctx, username)
+func (s *UserService) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
+	users, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
-		return domain.User{}, ErrUserNotFound
+		return nil, ErrUserNotFound
 	}
-	return user, nil
+	return users, nil
 }
 
 func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error {
@@ -225,10 +225,20 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 	if err != nil {
 		return ErrUserNotFound
 	}
-	_, err = s.repo.GetByEmail(ctx, *params.Email)
-	if err == nil {
-		return ErrEmailAlreadyExists
-	}
+
+	if params.Role != nil && claims.Role != "admin" {
+        return errors.New("only administrator can change user role")
+    }
+
+	if params.Email != nil && *params.Email != user.Email {
+        existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
+        if err == nil && existingUser.ID != params.ID {
+            return ErrEmailAlreadyExists
+        }
+        if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+            return fmt.Errorf("service.Update: failed to check email: %w", err)
+        }
+    }
 
 	if params.Password != nil {
 		passwordHash, err := s.hashPassword(*params.Password)
@@ -250,8 +260,8 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		updatedUser.PasswordHash = *params.PasswordHash
 	}
 	if params.Role != nil {
-		updatedUser.Role = *params.Role
-	}
+        updatedUser.Role = *params.Role
+    }
 	updatedUser.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(ctx, updatedUser); err != nil {

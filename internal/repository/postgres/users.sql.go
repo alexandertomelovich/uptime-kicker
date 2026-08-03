@@ -230,7 +230,7 @@ func (q *Queries) GetByTelegramID(ctx context.Context, telegramID int64) (GetByT
 	return i, err
 }
 
-const getByUsername = `-- name: GetByUsername :one
+const getUsersByName = `-- name: GetUsersByName :many
 SELECT id,
     email,
     name,
@@ -239,10 +239,12 @@ SELECT id,
     role,
     created_at,
     updated_at
-FROM users WHERE name = $1 ORDER BY created_at DESC
+FROM users 
+WHERE name = $1 
+ORDER BY created_at DESC
 `
 
-type GetByUsernameRow struct {
+type GetUsersByNameRow struct {
 	ID           uuid.UUID          `json:"id"`
 	Email        string             `json:"email"`
 	Name         string             `json:"name"`
@@ -253,20 +255,33 @@ type GetByUsernameRow struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) GetByUsername(ctx context.Context, name string) (GetByUsernameRow, error) {
-	row := q.db.QueryRow(ctx, getByUsername, name)
-	var i GetByUsernameRow
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Name,
-		&i.TelegramID,
-		&i.PasswordHash,
-		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+func (q *Queries) GetUsersByName(ctx context.Context, name string) ([]GetUsersByNameRow, error) {
+	rows, err := q.db.Query(ctx, getUsersByName, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetUsersByNameRow{}
+	for rows.Next() {
+		var i GetUsersByNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Name,
+			&i.TelegramID,
+			&i.PasswordHash,
+			&i.Role,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateUser = `-- name: UpdateUser :one

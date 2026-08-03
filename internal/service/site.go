@@ -63,10 +63,11 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 		VerificationToken:    token,
 		IsActive:             false,
 	}
-	_, err = s.repo.Create(ctx, site)
+	id, err := s.repo.Create(ctx, site)
 	if err != nil {
 		return domain.Site{}, fmt.Errorf("service.Create: %w", err)
 	}
+	site.ID = id
 	return site, nil
 }
 
