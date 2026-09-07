@@ -10,6 +10,7 @@ import (
 	"health_checker/internal/repository"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,7 @@ import (
 )
 
 var (
-	ErrUserNotFound       = errors.New("user not found")
+	ErrNotFound           = errors.New("not found")
 	ErrEmailAlreadyExists = errors.New("user with this email already exists")
 )
 
@@ -36,11 +37,11 @@ func NewUserService(repo repository.UserRepository, notif notifier.Sender, jwtMa
 }
 
 type RegisterRequest struct {
-    Name       string `json:"name" validate:"required"`    
-    Email      string `json:"email" validate:"required"`     
-    TelegramID int64  `json:"telegram_id" validate:"required"`
-    Password   string `json:"password" validate:"required"` 
-    Role       string `json:"role,omitempty"`                
+	Name       string `json:"name" validate:"required"`
+	Email      string `json:"email" validate:"required"`
+	TelegramID int64  `json:"telegram_id" validate:"required"`
+	Password   string `json:"password" validate:"required"`
+	Role       string `json:"role,omitempty"`
 }
 
 type UpdateUserParams struct {
@@ -50,6 +51,16 @@ type UpdateUserParams struct {
 	Password     *string `json:"password,omitempty"`
 	PasswordHash *string `json:"-"`
 	Role         *string `json:"role,omitempty"`
+}
+
+type PasswordPolicy struct {
+	MinLength    int
+	MaxLength    int
+}
+
+var DefaultPolicy = PasswordPolicy{
+	MinLength:    8,
+	MaxLength:    100,
 }
 
 func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain.User, error) {
@@ -77,6 +88,10 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 
 	if req.Role == "admin" {
 		return domain.User{}, errors.New("cannot create a user with administrator rights")
+	}
+	validate, problems := s.validatePassword(req.Password)
+	if !validate {
+		return domain.User{}, fmt.Errorf("password validation failed: %s", strings.Join(problems, ", "))
 	}
 
 	passwordHash, err := s.hashPassword(req.Password)
@@ -129,12 +144,12 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*auth.
 func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return ErrUserNotFound
+		return ErrNotFound
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
-			return ErrUserNotFound
+		if errors.Is(err, repository.ErrNotFound) {
+			return ErrNotFound
 		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
@@ -180,7 +195,7 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (domain.User, e
 
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.User{}, ErrUserNotFound
+		return domain.User{}, ErrNotFound
 	}
 
 	return user, nil
@@ -198,7 +213,7 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 
 	user, err := s.repo.GetByTelegramID(ctx, telegramID)
 	if err != nil {
-		return domain.User{}, ErrUserNotFound
+		return domain.User{}, ErrNotFound
 	}
 	return user, nil
 }
@@ -206,7 +221,7 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 func (s *UserService) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
 	users, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
-		return nil, ErrUserNotFound
+		return nil, ErrNotFound
 	}
 	return users, nil
 }
@@ -223,24 +238,29 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 
 	user, err := s.repo.GetByID(ctx, params.ID)
 	if err != nil {
-		return ErrUserNotFound
+		return ErrNotFound
 	}
 
 	if params.Role != nil && claims.Role != "admin" {
-        return errors.New("only administrator can change user role")
-    }
+		return errors.New("only administrator can change user role")
+	}
 
 	if params.Email != nil && *params.Email != user.Email {
-        existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
-        if err == nil && existingUser.ID != params.ID {
-            return ErrEmailAlreadyExists
-        }
-        if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-            return fmt.Errorf("service.Update: failed to check email: %w", err)
-        }
-    }
+		existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
+		if err == nil && existingUser.ID != params.ID {
+			return ErrEmailAlreadyExists
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("service.Update: failed to check email: %w", err)
+		}
+	}
 
 	if params.Password != nil {
+		validate, problems := s.validatePassword(*params.Password)
+		if !validate {
+			return fmt.Errorf("password validation failed: %s", strings.Join(problems, ", "))
+		}
+
 		passwordHash, err := s.hashPassword(*params.Password)
 		if err != nil {
 			return fmt.Errorf("service.Update: %w", err)
@@ -260,8 +280,8 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		updatedUser.PasswordHash = *params.PasswordHash
 	}
 	if params.Role != nil {
-        updatedUser.Role = *params.Role
-    }
+		updatedUser.Role = *params.Role
+	}
 	updatedUser.UpdatedAt = time.Now()
 
 	if err := s.repo.Update(ctx, updatedUser); err != nil {
@@ -311,6 +331,53 @@ func (s *UserService) checkAuth(ctx context.Context) (*auth.Claims, error) {
 		return nil, errors.New("unauthorized")
 	}
 	return claims, nil
+}
+
+func (s *UserService) validatePassword(password string) (bool, []string) {
+	var errors []string
+
+	if len(password) < DefaultPolicy.MinLength {
+		errors = append(errors, "minimum length required")
+	}
+
+	if len(password) > DefaultPolicy.MaxLength {
+		errors = append(errors, "too long")
+	}
+
+	var (
+        hasDigit   bool
+        hasUpper   bool
+        hasLower   bool
+        hasSpecial bool
+    )
+
+	for _, symbol := range password {
+		switch{
+		case unicode.IsDigit(symbol):
+			hasDigit = true
+		case unicode.IsUpper(symbol):
+			hasUpper = true
+		case unicode.IsLower(symbol):
+			hasLower = true
+		case unicode.IsPunct(symbol) || unicode.IsSymbol(symbol):
+			hasSpecial = true
+		}
+	}
+
+	if !hasDigit {
+        errors = append(errors, "need at least one digit")
+    }
+    if !hasUpper {
+        errors = append(errors, "need uppercase letter")
+    }
+    if !hasLower {
+        errors = append(errors, "need lowercase letter")
+    }
+    if !hasSpecial {
+        errors = append(errors, "need special character")
+    }
+    
+    return len(errors) == 0, errors
 }
 
 func (s *UserService) hashPassword(password string) (string, error) {

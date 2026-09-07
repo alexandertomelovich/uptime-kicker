@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrUserNotFound = errors.New("user not found")
+var ErrNotFound = errors.New("not found")
 
 type UserRepository struct {
 	queries *postgres.Queries
@@ -59,7 +59,7 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.queries.DeleteUser(ctx, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrUserNotFound
+			return ErrNotFound
 		}
 		return fmt.Errorf("repository.DeleteUser: %w", err)
 	}
@@ -69,6 +69,9 @@ func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
 func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 	usersDB, err := r.queries.GetAllUsers(ctx)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("repository.GetAllUser: %w", err)
 	}
 	users := make([]domain.User, len(usersDB))
@@ -90,6 +93,9 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.User, error) {
 	userDB, err := r.queries.GetByEmail(ctx, email)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, ErrNotFound
+		}
 		return domain.User{}, fmt.Errorf("repository.GetByEmail: %w", err)
 	}
 
@@ -108,6 +114,9 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.U
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
 	userDB, err := r.queries.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, ErrNotFound
+		}
 		return domain.User{}, fmt.Errorf("repository.GetByIDUser: %w", err)
 	}
 
@@ -126,6 +135,9 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) (domain.User, error) {
 	userDB, err := r.queries.GetByTelegramID(ctx, telegramID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.User{}, ErrNotFound
+		}
 		return domain.User{}, fmt.Errorf("repository.GetByTelegramID: %w", err)
 	}
 
@@ -144,6 +156,9 @@ func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) 
 func (r *UserRepository) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
 	usersDB, err := r.queries.GetUsersByName(ctx, username)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
 		return nil, fmt.Errorf("repository.GetByUsername: %w", err)
 	}
 	users := make([]domain.User, len(usersDB))
