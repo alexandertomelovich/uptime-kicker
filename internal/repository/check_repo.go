@@ -62,7 +62,7 @@ func (r *CheckRepository) fromDomain(stat domain.CheckDailyStat) postgres.CheckD
 
 func (r *CheckRepository) AggregateDailyStats(ctx context.Context) error {
 	if err := r.queries.AggregateDailyStats(ctx); err != nil {
-		return fmt.Errorf("repository.AAggregateDailyStats: %w", err)
+		return fmt.Errorf("repository.AggregateDailyStats: %w", err)
 	}
 	return nil
 }

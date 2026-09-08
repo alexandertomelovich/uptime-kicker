@@ -26,12 +26,26 @@ var (
 	ErrAccessDenied        = errors.New("access denied: insufficient permissions")
 )
 
-type SiteService struct {
-	repo     repository.SiteRepository
-	userRepo repository.UserRepository
+type SiteRepository interface {
+	Create(ctx context.Context, site domain.Site) (uuid.UUID, error)
+	Delete(ctx context.Context, id, user_id uuid.UUID) error
+	GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error)
+	GetAllSites(ctx context.Context) ([]domain.Site, error)
+	GetByUserID(ctx context.Context, user_id uuid.UUID) ([]domain.Site, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
+	GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error)
+	UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
+	Update(ctx context.Context, site domain.Site) (domain.Site, error)
+	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error)
 }
 
-func NewSiteService(repo repository.SiteRepository, userRepo repository.UserRepository) *SiteService {
+type SiteService struct {
+	repo     SiteRepository
+	userRepo UserRepository
+}
+
+func NewSiteService(repo SiteRepository, userRepo UserRepository) *SiteService {
 	return &SiteService{
 		repo:     repo,
 		userRepo: userRepo,
@@ -227,10 +241,10 @@ func (s *SiteService) updateStatusInternal(
 }
 
 func (s *SiteService) UpdateStatusByID(
-	ctx context.Context, 
-	siteID uuid.UUID, 
-	newStatus domain.SiteStatus, 
-	statusCode int32,responseTimeMs *int,
+	ctx context.Context,
+	siteID uuid.UUID,
+	newStatus domain.SiteStatus,
+	statusCode int32, responseTimeMs *int,
 ) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {

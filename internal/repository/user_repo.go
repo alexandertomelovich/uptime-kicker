@@ -22,19 +22,6 @@ func NewUserRepository(queries *postgres.Queries) *UserRepository {
 	return &UserRepository{queries: queries}
 }
 
-func (r *UserRepository) toDomain(dbUser postgres.User) domain.User {
-	return domain.User{
-		ID:           dbUser.ID,
-		Name:         dbUser.Name,
-		Email:        dbUser.Email,
-		TelegramID:   dbUser.TelegramID,
-		PasswordHash: converters.SafeString(dbUser.PasswordHash),
-		Role:         converters.SafeString(dbUser.Role),
-		CreatedAt:    dbUser.CreatedAt.Time,
-		UpdatedAt:    dbUser.UpdatedAt.Time,
-	}
-}
-
 func (r *UserRepository) fromDomain(user domain.User) postgres.CreateUserParams {
 	return postgres.CreateUserParams{
 		Email:        user.Email,
