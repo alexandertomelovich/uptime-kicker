@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"health_checker/internal/domain"
-	"health_checker/internal/repository"
 	"health_checker/internal/repository/converters"
 	"health_checker/internal/repository/postgres"
 	"time"
@@ -15,23 +14,26 @@ import (
 	"github.com/google/uuid"
 )
 
-var (
-	ErrSiteNotFound        = errors.New("site not found")
-	ErrSiteNotBelongUser   = errors.New("site does not belong to user")
-	ErrInvalidToken        = errors.New("invalid verification token")
-	ErrSiteAlreadyVerified = errors.New("site already verified")
-	ErrSiteNotVerified     = errors.New("site not verified")
-	ErrSiteNotActive       = errors.New("site not active")
-	ErrTokenGeneration     = errors.New("failed to generate verification token")
-	ErrAccessDenied        = errors.New("access denied: insufficient permissions")
-)
-
-type SiteService struct {
-	repo     repository.SiteRepository
-	userRepo repository.UserRepository
+type SiteRepository interface {
+	Create(ctx context.Context, site domain.Site) (uuid.UUID, error)
+	Delete(ctx context.Context, id, user_id uuid.UUID) error
+	GetActiveSitesByStatus(ctx context.Context, status domain.SiteStatus) ([]domain.Site, error)
+	GetAllSites(ctx context.Context) ([]domain.Site, error)
+	GetByUserID(ctx context.Context, user_id uuid.UUID) ([]domain.Site, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
+	GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error)
+	UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
+	Update(ctx context.Context, site domain.Site) (domain.Site, error)
+	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error)
 }
 
-func NewSiteService(repo repository.SiteRepository, userRepo repository.UserRepository) *SiteService {
+type SiteService struct {
+	repo     SiteRepository
+	userRepo UserRepository
+}
+
+func NewSiteService(repo SiteRepository, userRepo UserRepository) *SiteService {
 	return &SiteService{
 		repo:     repo,
 		userRepo: userRepo,
@@ -51,7 +53,7 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 
 	token, err := generateVerificationToken()
 	if err != nil {
-		return domain.Site{}, fmt.Errorf("%w: %v", ErrTokenGeneration, err)
+		return domain.Site{}, fmt.Errorf("%w: %v", domain.ErrTokenGeneration, err)
 	}
 
 	site := domain.Site{
@@ -74,21 +76,21 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return ErrSiteNotFound
+		return domain.ErrSiteNotFound
 	}
 
 	if site.UserID != userID {
-		return ErrSiteNotBelongUser
+		return domain.ErrSiteNotBelongUser
 	}
 
 	if site.VerifiedAt != nil {
-		return ErrSiteAlreadyVerified
+		return domain.ErrSiteAlreadyVerified
 	}
 
 	_, err = s.repo.VerifySite(ctx, id, userID, token)
 	if err != nil {
-		if errors.Is(err, repository.ErrInvalidVerificationToken) {
-			return ErrInvalidToken
+		if errors.Is(err, domain.ErrInvalidVerificationToken) {
+			return domain.ErrInvalidToken
 		}
 		return fmt.Errorf("service.VerifySite: %w", err)
 	}
@@ -98,14 +100,14 @@ func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, toke
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return ErrSiteNotFound
+		return domain.ErrSiteNotFound
 	}
 	if site.UserID != userID {
-		return ErrSiteNotBelongUser
+		return domain.ErrSiteNotBelongUser
 	}
 	if err := s.repo.Delete(ctx, id, userID); err != nil {
-		if errors.Is(err, repository.ErrSiteNotFound) {
-			return ErrSiteNotFound
+		if errors.Is(err, domain.ErrSiteNotFound) {
+			return domain.ErrSiteNotFound
 		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
@@ -126,7 +128,7 @@ func (s *SiteService) GetAllSites(ctx context.Context, userID uuid.UUID) ([]doma
 		return nil, fmt.Errorf("failed to get sites: %w", err)
 	}
 	if user.Role != "admin" {
-		return nil, ErrAccessDenied
+		return nil, domain.ErrAccessDenied
 	}
 
 	sites, err := s.repo.GetAllSites(ctx)
@@ -152,7 +154,7 @@ func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]doma
 func (s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.Site{}, ErrSiteNotFound
+		return domain.Site{}, domain.ErrSiteNotFound
 	}
 	return site, nil
 }
@@ -182,19 +184,19 @@ func (s *SiteService) UpdateStatus(
 ) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
-		return domain.Site{}, ErrSiteNotFound
+		return domain.Site{}, domain.ErrSiteNotFound
 	}
 
 	if site.UserID != userID {
-		return domain.Site{}, ErrSiteNotBelongUser
+		return domain.Site{}, domain.ErrSiteNotBelongUser
 	}
 
 	if site.VerifiedAt == nil {
-		return domain.Site{}, ErrSiteNotVerified
+		return domain.Site{}, domain.ErrSiteNotVerified
 	}
 
 	if !site.IsActive {
-		return domain.Site{}, ErrSiteNotActive
+		return domain.Site{}, domain.ErrSiteNotActive
 	}
 
 	return s.updateStatusInternal(ctx, site, newStatus, statusCode, responseTimeMs)
@@ -227,14 +229,14 @@ func (s *SiteService) updateStatusInternal(
 }
 
 func (s *SiteService) UpdateStatusByID(
-	ctx context.Context, 
-	siteID uuid.UUID, 
-	newStatus domain.SiteStatus, 
-	statusCode int32,responseTimeMs *int,
+	ctx context.Context,
+	siteID uuid.UUID,
+	newStatus domain.SiteStatus,
+	statusCode int32, responseTimeMs *int,
 ) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
-		return domain.Site{}, ErrSiteNotFound
+		return domain.Site{}, domain.ErrSiteNotFound
 	}
 
 	now := time.Now()

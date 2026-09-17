@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"health_checker/internal/notifier"
 	"health_checker/internal/repository"
-	"health_checker/internal/telegram"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ type CheckResult struct {
 
 type CheckerService struct {
 	repo        repository.SiteRepository
-	sender      telegram.Sender
+	sender      notifier.Sender
 	numWorkers  int
 	limit       int
 	jobsChan    chan CheckJob
@@ -38,7 +37,7 @@ type CheckerService struct {
 
 func NewCheckerService(
 	repo repository.SiteRepository,
-	sender telegram.Sender,
+	sender notifier.Sender,
 	numWorkers int,
 	limit int,
 	queueSize int,

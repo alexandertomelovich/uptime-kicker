@@ -7,7 +7,6 @@ import (
 	"health_checker/internal/auth"
 	"health_checker/internal/domain"
 	"health_checker/internal/notifier"
-	"health_checker/internal/repository"
 	"strings"
 	"time"
 	"unicode"
@@ -17,18 +16,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	ErrNotFound           = errors.New("not found")
-	ErrEmailAlreadyExists = errors.New("user with this email already exists")
-)
+
+
+type UserRepository interface {
+	Create(ctx context.Context, user domain.User) (uuid.UUID, error)
+	Delete(ctx context.Context, id uuid.UUID) error
+	GetAll(ctx context.Context) ([]domain.User, error)
+	GetByEmail(ctx context.Context, email string) (domain.User, error)
+	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
+	GetByTelegramID(ctx context.Context, telegramID int64) (domain.User, error)
+	GetByUsername(ctx context.Context, username string) ([]domain.User, error)
+	Update(ctx context.Context, user domain.User) error
+}
 
 type UserService struct {
-	repo       repository.UserRepository
+	repo       UserRepository
 	notif      notifier.Sender
 	jwtManager *auth.JWTManager
 }
 
-func NewUserService(repo repository.UserRepository, notif notifier.Sender, jwtManager *auth.JWTManager) *UserService {
+func NewUserService(repo UserRepository, notif notifier.Sender, jwtManager *auth.JWTManager) *UserService {
 	return &UserService{
 		repo:       repo,
 		notif:      notif,
@@ -37,10 +44,10 @@ func NewUserService(repo repository.UserRepository, notif notifier.Sender, jwtMa
 }
 
 type RegisterRequest struct {
-	Name       string `json:"name" validate:"required"`
-	Email      string `json:"email" validate:"required"`
-	TelegramID int64  `json:"telegram_id" validate:"required"`
-	Password   string `json:"password" validate:"required"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	TelegramID int64  `json:"telegram_id"`
+	Password   string `json:"password"`
 	Role       string `json:"role,omitempty"`
 }
 
@@ -69,7 +76,7 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 		return domain.User{}, fmt.Errorf("email %s already registered", req.Email)
 	}
 
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !errors.Is(err, domain.ErrNotFound) {
 		return domain.User{}, fmt.Errorf("failed to check email: %w", err)
 	}
 
@@ -78,7 +85,7 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 		return domain.User{}, fmt.Errorf("this telegram already registered")
 	}
 
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if !errors.Is(err, domain.ErrNotFound) {
 		return domain.User{}, fmt.Errorf("failed to check telegram: %w", err)
 	}
 
@@ -114,7 +121,7 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 
 	user.ID = userID
 
-	go s.sendWelcome(&user)
+	go s.sendWelcome(ctx, &user)
 
 	return user, nil
 }
@@ -144,12 +151,12 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*auth.
 func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return ErrNotFound
+		return fmt.Errorf("service.Delete: %w", err)
 	}
 
 	if err := s.repo.Delete(ctx, id); err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return ErrNotFound
+		if errors.Is(err, domain.ErrNotFound) {
+			return err
 		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
@@ -195,7 +202,7 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (domain.User, e
 
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.User{}, ErrNotFound
+		return domain.User{}, domain.ErrNotFound
 	}
 
 	return user, nil
@@ -213,7 +220,7 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 
 	user, err := s.repo.GetByTelegramID(ctx, telegramID)
 	if err != nil {
-		return domain.User{}, ErrNotFound
+		return domain.User{}, fmt.Errorf("service.GetByTelegramID: %w", err)
 	}
 	return user, nil
 }
@@ -221,7 +228,7 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 func (s *UserService) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
 	users, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
-		return nil, ErrNotFound
+		return nil, fmt.Errorf("service.GetByUsername: %w", err)
 	}
 	return users, nil
 }
@@ -233,12 +240,12 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 	}
 
 	if claims.Role != "admin" && claims.UserID != params.ID {
-		return ErrAccessDenied
+		return domain.ErrAccessDenied
 	}
 
 	user, err := s.repo.GetByID(ctx, params.ID)
 	if err != nil {
-		return ErrNotFound
+		return fmt.Errorf("service.GetByID: %w", err)
 	}
 
 	if params.Role != nil && claims.Role != "admin" {
@@ -248,7 +255,7 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 	if params.Email != nil && *params.Email != user.Email {
 		existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
 		if err == nil && existingUser.ID != params.ID {
-			return ErrEmailAlreadyExists
+			return domain.ErrEmailAlreadyExists
 		}
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("service.Update: failed to check email: %w", err)
@@ -307,7 +314,7 @@ func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (domain.Use
 	return user, nil
 }
 
-func (s *UserService) sendWelcome(user *domain.User) {
+func (s *UserService) sendWelcome(ctx context.Context, user *domain.User) {
 	msg := notifier.Message{
 		ChatID: user.TelegramID,
 		Text: fmt.Sprintf(
@@ -322,7 +329,7 @@ func (s *UserService) sendWelcome(user *domain.User) {
 		),
 		ParseMode: "HTML",
 	}
-	_ = s.notif.Send(context.Background(), msg)
+	_ = s.notif.Send(ctx, msg)
 }
 
 func (s *UserService) checkAuth(ctx context.Context) (*auth.Claims, error) {
