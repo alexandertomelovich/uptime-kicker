@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"health_checker/internal/domain"
 	"net/http"
 	"strings"
 )
@@ -46,7 +47,7 @@ func GetUserFromContext(ctx context.Context) (*Claims, bool) {
 	return claims, ok
 }
 
-func RequireRole(allowedRoles ...string) func(http.Handler) http.Handler {
+func RequireRole(allowedRoles ...domain.Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := GetUserFromContext(r.Context())

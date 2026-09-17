@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"health_checker/internal/domain"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,7 +31,7 @@ func NewJWTManager(accessSecret, refreshSecret string, accessTTL, refreshTTL tim
 	}
 }
 
-func (m *JWTManager) GenerateTokenPair(userID uuid.UUID, email string, role string, telegramID int64) (*TokenPair, error) {
+func (m *JWTManager) GenerateTokenPair(userID uuid.UUID, email string, role domain.Role, telegramID int64) (*TokenPair, error) {
 	accessToken, err := m.generateAccessToken(userID, email, role, telegramID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate access token: %w", err)
@@ -49,7 +50,7 @@ func (m *JWTManager) GenerateTokenPair(userID uuid.UUID, email string, role stri
 	}, nil
 }
 
-func (m *JWTManager) generateAccessToken(userID uuid.UUID, email string, role string, telegramID int64) (string, error) {
+func (m *JWTManager) generateAccessToken(userID uuid.UUID, email string, role domain.Role, telegramID int64) (string, error) {
 	claims := &Claims{
 		UserID:     userID,
 		Email:      email,
@@ -67,12 +68,12 @@ func (m *JWTManager) generateAccessToken(userID uuid.UUID, email string, role st
 	return token.SignedString(m.accessSecret)
 }
 
-func (m *JWTManager) generateRefreshToken(userID uuid.UUID, email, role string, telegramID int64) (string, error) {
+func (m *JWTManager) generateRefreshToken(userID uuid.UUID, email string, role domain.Role, telegramID int64) (string, error) {
 	claims := &Claims{
-		UserID: userID,
-		Email: email,
+		UserID:     userID,
+		Email:      email,
 		TelegramID: telegramID,
-		Role: role,
+		Role:       role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.refreshTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

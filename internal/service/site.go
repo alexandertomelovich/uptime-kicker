@@ -53,7 +53,7 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 
 	token, err := generateVerificationToken()
 	if err != nil {
-		return domain.Site{}, fmt.Errorf("%w: %v", domain.ErrTokenGeneration, err)
+		return domain.Site{}, fmt.Errorf("%w: %w", domain.ErrTokenGeneration, err)
 	}
 
 	site := domain.Site{
@@ -76,7 +76,7 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.ErrSiteNotFound
+		return domain.ErrNotFound
 	}
 
 	if site.UserID != userID {
@@ -89,7 +89,7 @@ func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, toke
 
 	_, err = s.repo.VerifySite(ctx, id, userID, token)
 	if err != nil {
-		if errors.Is(err, domain.ErrInvalidVerificationToken) {
+		if errors.Is(err, domain.ErrInvalidToken) {
 			return domain.ErrInvalidToken
 		}
 		return fmt.Errorf("service.VerifySite: %w", err)
@@ -100,14 +100,14 @@ func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, toke
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.ErrSiteNotFound
+		return domain.ErrNotFound
 	}
 	if site.UserID != userID {
 		return domain.ErrSiteNotBelongUser
 	}
 	if err := s.repo.Delete(ctx, id, userID); err != nil {
-		if errors.Is(err, domain.ErrSiteNotFound) {
-			return domain.ErrSiteNotFound
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.ErrNotFound
 		}
 		return fmt.Errorf("service.Delete: %w", err)
 	}
@@ -127,7 +127,7 @@ func (s *SiteService) GetAllSites(ctx context.Context, userID uuid.UUID) ([]doma
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sites: %w", err)
 	}
-	if user.Role != "admin" {
+	if !user.Role.IsAdmin() {
 		return nil, domain.ErrAccessDenied
 	}
 
@@ -154,7 +154,7 @@ func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]doma
 func (s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.Site{}, domain.ErrSiteNotFound
+		return domain.Site{}, domain.ErrNotFound
 	}
 	return site, nil
 }
@@ -184,7 +184,7 @@ func (s *SiteService) UpdateStatus(
 ) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
-		return domain.Site{}, domain.ErrSiteNotFound
+		return domain.Site{}, domain.ErrNotFound
 	}
 
 	if site.UserID != userID {
@@ -236,7 +236,7 @@ func (s *SiteService) UpdateStatusByID(
 ) (domain.Site, error) {
 	site, err := s.repo.GetByID(ctx, siteID)
 	if err != nil {
-		return domain.Site{}, domain.ErrSiteNotFound
+		return domain.Site{}, domain.ErrNotFound
 	}
 
 	now := time.Now()

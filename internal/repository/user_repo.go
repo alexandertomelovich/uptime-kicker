@@ -21,13 +21,23 @@ func NewUserRepository(queries *postgres.Queries) *UserRepository {
 }
 
 func (r *UserRepository) fromDomain(user domain.User) postgres.CreateUserParams {
+	role := string(user.Role)
 	return postgres.CreateUserParams{
 		Email:        user.Email,
 		Name:         user.Name,
 		TelegramID:   user.TelegramID,
 		PasswordHash: &user.PasswordHash,
-		Role:         &user.Role,
+		Role:         &role,
 	}
+}
+
+func toDomainRole(roleDB *string) domain.Role {
+	role := domain.Role(converters.SafeString(roleDB))
+	if !role.IsValid() {
+		// Не доверяем некорректным данным из БД: безопасный дефолт — обычный пользователь.
+		return domain.RoleUser
+	}
+	return role
 }
 
 func (r *UserRepository) Create(ctx context.Context, user domain.User) (uuid.UUID, error) {
@@ -67,7 +77,7 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]domain.User, error) {
 			Email:        userDB.Email,
 			TelegramID:   userDB.TelegramID,
 			PasswordHash: converters.SafeString(userDB.PasswordHash),
-			Role:         converters.SafeString(userDB.Role),
+			Role:         toDomainRole(userDB.Role),
 			CreatedAt:    userDB.CreatedAt.Time,
 			UpdatedAt:    userDB.UpdatedAt.Time,
 		}
@@ -90,7 +100,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (domain.U
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
 		PasswordHash: converters.SafeString(userDB.PasswordHash),
-		Role:         converters.SafeString(userDB.Role),
+		Role:         toDomainRole(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -111,7 +121,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.User
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
 		PasswordHash: converters.SafeString(userDB.PasswordHash),
-		Role:         converters.SafeString(userDB.Role),
+		Role:         toDomainRole(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -132,7 +142,7 @@ func (r *UserRepository) GetByTelegramID(ctx context.Context, telegramID int64) 
 		Email:        userDB.Email,
 		TelegramID:   userDB.TelegramID,
 		PasswordHash: converters.SafeString(userDB.PasswordHash),
-		Role:         converters.SafeString(userDB.Role),
+		Role:         toDomainRole(userDB.Role),
 		CreatedAt:    userDB.CreatedAt.Time,
 		UpdatedAt:    userDB.UpdatedAt.Time,
 	}, nil
@@ -155,7 +165,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) ([]
 			Email:        userDB.Email,
 			TelegramID:   userDB.TelegramID,
 			PasswordHash: converters.SafeString(userDB.PasswordHash),
-			Role:         converters.SafeString(userDB.Role),
+			Role:         toDomainRole(userDB.Role),
 			CreatedAt:    userDB.CreatedAt.Time,
 			UpdatedAt:    userDB.UpdatedAt.Time,
 		}
@@ -164,11 +174,12 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) ([]
 }
 
 func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
+	role := string(user.Role)
 	params := postgres.UpdateUserParams{
 		Email:        user.Email,
 		Name:         user.Name,
 		PasswordHash: &user.PasswordHash,
-		Role:         &user.Role,
+		Role:         &role,
 		ID:           user.ID,
 	}
 

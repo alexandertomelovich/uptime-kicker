@@ -72,7 +72,7 @@ func (r *SiteRepository) Delete(ctx context.Context, id, user_id uuid.UUID) erro
 	_, err := r.queries.DeleteSite(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.ErrSiteNotFound
+			return domain.ErrNotFound
 		}
 		return fmt.Errorf("repository.DeleteSite: %w", err)
 	}
@@ -185,7 +185,7 @@ func (r *SiteRepository) VerifySite(ctx context.Context, id, userID uuid.UUID, t
 	site, err := r.queries.VerifySite(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Site{}, domain.ErrInvalidVerificationToken
+			return domain.Site{}, domain.ErrInvalidToken
 		}
 		return domain.Site{}, fmt.Errorf("repository.VerifySite: %w", err)
 	}

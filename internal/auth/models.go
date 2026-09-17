@@ -1,15 +1,17 @@
 package auth
 
 import (
+	"health_checker/internal/domain"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
 type Claims struct {
-	UserID     uuid.UUID `json:"user_id"`
-	Email      string    `json:"email"`
-	TelegramID int64     `json:"telegram_id,omitempty"`
-	Role       string    `json:"role"`
+	UserID     uuid.UUID   `json:"user_id"`
+	Email      string      `json:"email"`
+	TelegramID int64       `json:"telegram_id,omitempty"`
+	Role       domain.Role `json:"role"`
 	jwt.RegisteredClaims
 }
 
