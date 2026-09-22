@@ -297,8 +297,8 @@ RETURNING id
 `
 
 type UpdateUserParams struct {
-	Email        string    `json:"email"`
-	Name         string    `json:"name"`
+	Email        *string   `json:"email"`
+	Name         *string   `json:"name"`
 	PasswordHash *string   `json:"password_hash"`
 	Role         *string   `json:"role"`
 	ID           uuid.UUID `json:"id"`

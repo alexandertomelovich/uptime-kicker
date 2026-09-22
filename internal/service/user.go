@@ -24,7 +24,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByTelegramID(ctx context.Context, telegramID int64) (domain.User, error)
 	GetByUsername(ctx context.Context, username string) ([]domain.User, error)
-	Update(ctx context.Context, user domain.User) error
+	Update(ctx context.Context, update domain.UserUpdate) error
 }
 
 type UserService struct {
@@ -56,12 +56,11 @@ type RegisterRequest struct {
 }
 
 type UpdateUserParams struct {
-	ID           uuid.UUID
-	Email        *string      `json:"email,omitempty"`
-	Name         *string      `json:"name,omitempty"`
-	Password     *string      `json:"password,omitempty"`
-	PasswordHash *string      `json:"-"`
-	Role         *domain.Role `json:"role,omitempty"`
+	ID       uuid.UUID
+	Email    *string      `json:"email,omitempty"`
+	Name     *string      `json:"name,omitempty"`
+	Password *string      `json:"password,omitempty"`
+	Role     *domain.Role `json:"role,omitempty"`
 }
 
 type PasswordPolicy struct {
@@ -263,17 +262,12 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 	}
 
 	if params.Email != nil {
-        lower := strings.ToLower(*params.Email)
-        params.Email = &lower
-    }
+		lower := strings.ToLower(*params.Email)
+		params.Email = &lower
+	}
 
 	if !claims.Role.IsAdmin() && claims.UserID != params.ID {
 		return domain.ErrAccessDenied
-	}
-
-	user, err := s.repo.GetByID(ctx, params.ID)
-	if err != nil {
-		return fmt.Errorf("service.GetByID: %w", err)
 	}
 
 	if params.Role != nil {
@@ -285,13 +279,27 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		}
 	}
 
-	if params.Email != nil && *params.Email != user.Email {
-		existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
-		if err == nil && existingUser.ID != params.ID {
-			return domain.ErrEmailAlreadyExists
+	update := domain.UserUpdate{
+		ID:    params.ID,
+		Role:  params.Role,
+		Name:  params.Name,
+		Email: params.Email,
+	}
+
+	if params.Email != nil {
+		user, err := s.repo.GetByID(ctx, params.ID)
+		if err != nil {
+			return fmt.Errorf("service.GetByID: %w", err)
 		}
-		if err != nil && !errors.Is(err, domain.ErrNotFound) {
-			return fmt.Errorf("service.Update: failed to check email: %w", err)
+
+		if *params.Email != user.Email {
+			existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
+			if err == nil && existingUser.ID != params.ID {
+				return domain.ErrEmailAlreadyExists
+			}
+			if err != nil && !errors.Is(err, domain.ErrNotFound) {
+				return fmt.Errorf("service.Update: failed to check email: %w", err)
+			}
 		}
 	}
 
@@ -305,26 +313,10 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		if err != nil {
 			return fmt.Errorf("service.Update: %w", err)
 		}
-		params.PasswordHash = &passwordHash
+		update.PasswordHash = &passwordHash
 	}
 
-	updatedUser := user
-
-	if params.Email != nil {
-		updatedUser.Email = *params.Email
-	}
-	if params.Name != nil {
-		updatedUser.Name = *params.Name
-	}
-	if params.PasswordHash != nil {
-		updatedUser.PasswordHash = *params.PasswordHash
-	}
-	if params.Role != nil {
-		updatedUser.Role = *params.Role
-	}
-	updatedUser.UpdatedAt = time.Now()
-
-	if err := s.repo.Update(ctx, updatedUser); err != nil {
+	if err := s.repo.Update(ctx, update); err != nil {
 		return fmt.Errorf("service.Update: %w", err)
 	}
 

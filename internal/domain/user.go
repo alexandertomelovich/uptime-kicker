@@ -39,3 +39,14 @@ type User struct {
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }
+
+// UserUpdate описывает частичное обновление пользователя.
+// nil-поле означает «не менять», не-nil — «записать это значение».
+type UserUpdate struct {
+	ID           uuid.UUID
+	Email        *string
+	Name         *string
+	PasswordHash *string
+	Role         *Role
+}
+
