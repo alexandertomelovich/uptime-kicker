@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"health_checker/internal/domain"
 	"health_checker/internal/notifier"
-	"health_checker/internal/repository"
+	"health_checker/internal/repository/postgres"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,20 +25,37 @@ type CheckResult struct {
 	Err        error
 }
 
+// SiteRepository описывает операции над сайтами, нужные checker-сервису.
+type SiteRepository interface {
+	GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error)
+	GetByIDWithOwner(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
+}
+
+// CheckRepository описывает операции над логами проверок, нужные checker-сервису.
+type CheckRepository interface {
+	InsertLog(ctx context.Context, log domain.CheckLogsRaw) error
+}
+
 type CheckerService struct {
-	repo        repository.SiteRepository
+	repo        SiteRepository
+	checkRepo   CheckRepository
 	sender      notifier.Sender
 	numWorkers  int
 	limit       int
 	jobsChan    chan CheckJob
 	resultsChan chan CheckResult
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	startOnce sync.Once
+	stopOnce  sync.Once
 }
 
 func NewCheckerService(
-	repo repository.SiteRepository,
+	repo SiteRepository,
+	checkRepo CheckRepository,
 	sender notifier.Sender,
 	numWorkers int,
 	limit int,
@@ -45,6 +64,7 @@ func NewCheckerService(
 	ctx, cancel := context.WithCancel(context.Background())
 	return &CheckerService{
 		repo:        repo,
+		checkRepo:   checkRepo,
 		sender:      sender,
 		numWorkers:  numWorkers,
 		limit:       limit,
@@ -55,21 +75,41 @@ func NewCheckerService(
 	}
 }
 
+// Start запускает воркеры, процессор результатов и планировщик.
+// Идемпотентен: повторный вызов не создаёт дублирующих горутин.
 func (s *CheckerService) Start() {
-	for i := 1; i <= s.numWorkers; i++ {
-		go s.worker(i)
-	}
+	s.startOnce.Do(func() {
+		for i := 1; i <= s.numWorkers; i++ {
+			s.wg.Add(1)
+			go func(id int) {
+				defer s.wg.Done()
+				s.worker(id)
+			}(i)
+		}
 
-	go s.resultProcessor()
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.resultProcessor()
+		}()
 
-	go s.scheduler()
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.scheduler()
+		}()
+	})
 }
 
+// Stop сигнализирует о завершении всем горутинам и дожидается их выхода.
+// Каналы намеренно НЕ закрываются: закрытие канала со стороны, отличной от
+// отправителя, приводило бы к панике "send on closed channel". Остановка
+// реализована исключительно через отмену контекста. Идемпотентен.
 func (s *CheckerService) Stop() {
-	s.cancel()
-
-	close(s.jobsChan)
-	close(s.resultsChan)
+	s.stopOnce.Do(func() {
+		s.cancel()
+		s.wg.Wait()
+	})
 }
 
 func (s *CheckerService) sendStatusChangeAlert(ctx context.Context, message notifier.Message) error {

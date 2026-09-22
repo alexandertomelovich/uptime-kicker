@@ -173,14 +173,13 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) ([]
 	return users, nil
 }
 
-func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
-	role := string(user.Role)
+func (r *UserRepository) Update(ctx context.Context, update domain.UserUpdate) error {
 	params := postgres.UpdateUserParams{
-		Email:        user.Email,
-		Name:         user.Name,
-		PasswordHash: &user.PasswordHash,
-		Role:         &role,
-		ID:           user.ID,
+		Email:        update.Email,
+		Name:         update.Name,
+		PasswordHash: update.PasswordHash,
+		Role:         roleToDB(update.Role),
+		ID:           update.ID,
 	}
 
 	_, err := r.queries.UpdateUser(ctx, params)
@@ -188,4 +187,13 @@ func (r *UserRepository) Update(ctx context.Context, user domain.User) error {
 		return fmt.Errorf("repository.UpdateUser: %w", err)
 	}
 	return nil
+}
+
+// roleToDB превращает *domain.Role в *string для pgx, сохраняя nil (не менять поле).
+func roleToDB(role *domain.Role) *string {
+	if role == nil {
+		return nil
+	}
+	s := string(*role)
+	return &s
 }

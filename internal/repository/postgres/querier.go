@@ -26,8 +26,10 @@ type Querier interface {
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]Site, error)
 	GetSiteByID(ctx context.Context, id uuid.UUID) (Site, error)
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (GetSiteStatsRow, error)
+	GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWithOwnerRow, error)
 	GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site, error)
 	GetUsersByName(ctx context.Context, name string) ([]GetUsersByNameRow, error)
+	InsertCheckLog(ctx context.Context, arg InsertCheckLogParams) error
 	UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, error)
 	UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (Site, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (uuid.UUID, error)

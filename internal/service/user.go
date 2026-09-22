@@ -24,7 +24,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	GetByTelegramID(ctx context.Context, telegramID int64) (domain.User, error)
 	GetByUsername(ctx context.Context, username string) ([]domain.User, error)
-	Update(ctx context.Context, user domain.User) error
+	Update(ctx context.Context, update domain.UserUpdate) error
 }
 
 type UserService struct {
@@ -56,12 +56,11 @@ type RegisterRequest struct {
 }
 
 type UpdateUserParams struct {
-	ID           uuid.UUID
-	Email        *string      `json:"email,omitempty"`
-	Name         *string      `json:"name,omitempty"`
-	Password     *string      `json:"password,omitempty"`
-	PasswordHash *string      `json:"-"`
-	Role         *domain.Role `json:"role,omitempty"`
+	ID       uuid.UUID
+	Email    *string      `json:"email,omitempty"`
+	Name     *string      `json:"name,omitempty"`
+	Password *string      `json:"password,omitempty"`
+	Role     *domain.Role `json:"role,omitempty"`
 }
 
 type PasswordPolicy struct {
@@ -93,8 +92,6 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 		return domain.User{}, fmt.Errorf("failed to check telegram: %w", err)
 	}
 
-	// Роль при регистрации жёстко фиксируется как обычный пользователь:
-	// повышение до администратора возможно только через Update с правами admin.
 	validate, problems := s.validatePassword(req.Password)
 	if !validate {
 		return domain.User{}, fmt.Errorf("%w: %s", domain.ErrPasswordPolicy, strings.Join(problems, ", "))
@@ -148,7 +145,16 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*auth.
 }
 
 func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := s.repo.GetByID(ctx, id)
+	claims, err := s.checkAuth(ctx)
+	if err != nil {
+		return fmt.Errorf("service.Delete: %w", err)
+	}
+
+	if !claims.Role.IsAdmin() {
+		return domain.ErrAccessDenied
+	}
+
+	_, err = s.repo.GetByID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("service.Delete: %w", err)
 	}
@@ -181,6 +187,15 @@ func (s *UserService) GetAll(ctx context.Context) ([]domain.User, error) {
 }
 
 func (s *UserService) GetByEmail(ctx context.Context, email string) (domain.User, error) {
+	claims, err := s.checkAuth(ctx)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("service.GetByEmail: %w", err)
+	}
+
+	if !claims.Role.IsAdmin() {
+		return domain.User{}, domain.ErrAccessDenied
+	}
+
 	user, err := s.repo.GetByEmail(ctx, email)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("service.GetByEmail: %w", err)
@@ -201,7 +216,10 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (domain.User, e
 
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.User{}, domain.ErrNotFound
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.User{}, domain.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("service.GetByID: %w", err)
 	}
 
 	return user, nil
@@ -225,6 +243,14 @@ func (s *UserService) GetByTelegramID(ctx context.Context, telegramID int64) (do
 }
 
 func (s *UserService) GetByUsername(ctx context.Context, username string) ([]domain.User, error) {
+	claims, err := s.checkAuth(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service.GetByUsername: %w", err)
+	}
+
+	if !claims.Role.IsAdmin() {
+		return nil, domain.ErrAccessDenied
+	}
 	users, err := s.repo.GetByUsername(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("service.GetByUsername: %w", err)
@@ -238,13 +264,13 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		return err
 	}
 
-	if !claims.Role.IsAdmin() && claims.UserID != params.ID {
-		return domain.ErrAccessDenied
+	if params.Email != nil {
+		lower := strings.ToLower(*params.Email)
+		params.Email = &lower
 	}
 
-	user, err := s.repo.GetByID(ctx, params.ID)
-	if err != nil {
-		return fmt.Errorf("service.GetByID: %w", err)
+	if !claims.Role.IsAdmin() && claims.UserID != params.ID {
+		return domain.ErrAccessDenied
 	}
 
 	if params.Role != nil {
@@ -256,13 +282,27 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		}
 	}
 
-	if params.Email != nil && *params.Email != user.Email {
-		existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
-		if err == nil && existingUser.ID != params.ID {
-			return domain.ErrEmailAlreadyExists
+	update := domain.UserUpdate{
+		ID:    params.ID,
+		Role:  params.Role,
+		Name:  params.Name,
+		Email: params.Email,
+	}
+
+	if params.Email != nil {
+		user, err := s.repo.GetByID(ctx, params.ID)
+		if err != nil {
+			return fmt.Errorf("service.GetByID: %w", err)
 		}
-		if err != nil && !errors.Is(err, domain.ErrNotFound) {
-			return fmt.Errorf("service.Update: failed to check email: %w", err)
+
+		if *params.Email != user.Email {
+			existingUser, err := s.repo.GetByEmail(ctx, *params.Email)
+			if err == nil && existingUser.ID != params.ID {
+				return domain.ErrEmailAlreadyExists
+			}
+			if err != nil && !errors.Is(err, domain.ErrNotFound) {
+				return fmt.Errorf("service.Update: failed to check email: %w", err)
+			}
 		}
 	}
 
@@ -276,26 +316,10 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		if err != nil {
 			return fmt.Errorf("service.Update: %w", err)
 		}
-		params.PasswordHash = &passwordHash
+		update.PasswordHash = &passwordHash
 	}
 
-	updatedUser := user
-
-	if params.Email != nil {
-		updatedUser.Email = *params.Email
-	}
-	if params.Name != nil {
-		updatedUser.Name = *params.Name
-	}
-	if params.PasswordHash != nil {
-		updatedUser.PasswordHash = *params.PasswordHash
-	}
-	if params.Role != nil {
-		updatedUser.Role = *params.Role
-	}
-	updatedUser.UpdatedAt = time.Now()
-
-	if err := s.repo.Update(ctx, updatedUser); err != nil {
+	if err := s.repo.Update(ctx, update); err != nil {
 		return fmt.Errorf("service.Update: %w", err)
 	}
 
@@ -311,6 +335,15 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshToken string) (*a
 }
 
 func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
+	claims, err := s.checkAuth(ctx)
+	if err != nil {
+		return domain.User{}, fmt.Errorf("service.GetUserByID: %w", err)
+	}
+
+	if !claims.Role.IsAdmin() {
+		return domain.User{}, domain.ErrAccessDenied
+	}
+
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return domain.User{}, fmt.Errorf("service.GetUserByID: %w", err)

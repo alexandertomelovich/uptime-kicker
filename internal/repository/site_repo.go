@@ -113,9 +113,44 @@ func (r *SiteRepository) GetByUserID(ctx context.Context, user_id uuid.UUID) ([]
 func (r *SiteRepository) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
 	site, err := r.queries.GetSiteByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Site{}, domain.ErrNotFound
+		}
 		return domain.Site{}, fmt.Errorf("repository.GetByID: %w", err)
 	}
 	return r.toDomain(site), nil
+}
+
+// GetByIDWithOwner возвращает сайт вместе с telegram_id владельца.
+// Используется checker-сервисом для отправки уведомлений без отдельного
+// обращения к репозиторию пользователей.
+func (r *SiteRepository) GetByIDWithOwner(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+	row, err := r.queries.GetSiteWithOwner(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Site{}, domain.ErrNotFound
+		}
+		return domain.Site{}, fmt.Errorf("repository.GetByIDWithOwner: %w", err)
+	}
+
+	site := domain.Site{
+		ID:                   row.ID,
+		Url:                  row.Url,
+		Name:                 row.Name,
+		CheckIntervalSeconds: int(row.CheckIntervalSeconds),
+		UserID:               row.UserID,
+		Status:               domain.SiteStatus(converters.SafeString(row.Status)),
+		LastStatusCode:       row.LastStatusCode,
+		LastCheckedAt:        converters.PgTimestampToPtr(row.LastCheckedAt),
+		ResponseTimeMs:       row.ResponseTimeMs,
+		IsActive:             converters.SafeBool(row.IsActive),
+		VerifiedAt:           converters.PgTimestampToPtr(row.VerifiedAt),
+		VerificationToken:    converters.SafeString(row.VerificationToken),
+		CreatedAt:            row.CreatedAt.Time,
+		UpdatedAt:            row.UpdatedAt.Time,
+		OwnerTelegramID:      row.OwnerTelegramID,
+	}
+	return site, nil
 }
 
 func (r *SiteRepository) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
@@ -144,6 +179,9 @@ func (r *SiteRepository) GetSitesNeedingCheck(ctx context.Context, limit int) ([
 func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error) {
 	updated, err := r.queries.UpdateSiteStatus(ctx, params)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Site{}, domain.ErrNotFound
+		}
 		return domain.Site{}, fmt.Errorf("repository.UpdateSiteStatus: %w", err)
 	}
 
@@ -169,7 +207,10 @@ func (r *SiteRepository) Update(ctx context.Context, site domain.Site) (domain.S
 
 	updated, err := r.queries.UpdateSite(ctx, params)
 	if err != nil {
-		return domain.Site{}, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Site{}, domain.ErrNotFound
+		}
+		return domain.Site{}, fmt.Errorf("repository.UpdateSite: %w", err)
 	}
 
 	return r.toDomain(updated), nil

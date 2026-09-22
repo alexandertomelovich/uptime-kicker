@@ -315,6 +315,69 @@ func (q *Queries) GetSiteStats(ctx context.Context, userID uuid.UUID) (GetSiteSt
 	return i, err
 }
 
+const getSiteWithOwner = `-- name: GetSiteWithOwner :one
+SELECT
+    s.id,
+    s.url,
+    s.name,
+    s.check_interval_seconds,
+    s.user_id,
+    s.status,
+    s.last_status_code,
+    s.last_checked_at,
+    s.response_time_ms,
+    s.is_active,
+    s.verified_at,
+    s.verification_token,
+    s.created_at,
+    s.updated_at,
+    u.telegram_id AS owner_telegram_id
+FROM sites s
+JOIN users u ON u.id = s.user_id
+WHERE s.id = $1
+`
+
+type GetSiteWithOwnerRow struct {
+	ID                   uuid.UUID          `json:"id"`
+	Url                  string             `json:"url"`
+	Name                 string             `json:"name"`
+	CheckIntervalSeconds int32              `json:"check_interval_seconds"`
+	UserID               uuid.UUID          `json:"user_id"`
+	Status               *string            `json:"status"`
+	LastStatusCode       *int32             `json:"last_status_code"`
+	LastCheckedAt        pgtype.Timestamptz `json:"last_checked_at"`
+	ResponseTimeMs       *int32             `json:"response_time_ms"`
+	IsActive             *bool              `json:"is_active"`
+	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
+	VerificationToken    *string            `json:"verification_token"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	OwnerTelegramID      int64              `json:"owner_telegram_id"`
+}
+
+func (q *Queries) GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWithOwnerRow, error) {
+	row := q.db.QueryRow(ctx, getSiteWithOwner, id)
+	var i GetSiteWithOwnerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Url,
+		&i.Name,
+		&i.CheckIntervalSeconds,
+		&i.UserID,
+		&i.Status,
+		&i.LastStatusCode,
+		&i.LastCheckedAt,
+		&i.ResponseTimeMs,
+		&i.IsActive,
+		&i.VerifiedAt,
+		&i.VerificationToken,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerTelegramID,
+	)
+	return i, err
+}
+
 const getSitesNeedingCheck = `-- name: GetSitesNeedingCheck :many
 SELECT 
     id,

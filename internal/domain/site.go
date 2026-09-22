@@ -1,8 +1,9 @@
 package domain
 
 import (
-	"github.com/google/uuid"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type SiteStatus string
@@ -29,6 +30,10 @@ type Site struct {
 	VerificationToken    string     `json:"verification_token"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
+
+	// OwnerTelegramID заполняется только запросами, которым нужен владелец сайта
+	// (например, для отправки уведомлений). В прочих выборках остаётся нулевым.
+	OwnerTelegramID int64 `json:"owner_telegram_id,omitempty"`
 }
 
 type SiteStats struct {
@@ -40,33 +45,33 @@ type SiteStats struct {
 }
 
 type SiteResponse struct {
-    ID                   uuid.UUID  `json:"id"`
-    Url                  string     `json:"url"`
-    Name                 string     `json:"name"`
-    CheckIntervalSeconds int        `json:"check_interval_seconds"`
-    UserID               uuid.UUID  `json:"user_id"`
-    Status               SiteStatus `json:"status"`
-    IsActive             bool       `json:"is_active"`
-    VerifiedAt           *time.Time `json:"verified_at,omitempty"`
-    LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
-    LastStatusCode       *int32     `json:"last_status_code,omitempty"`
-    CreatedAt            time.Time  `json:"created_at"`
-    UpdatedAt            time.Time  `json:"updated_at"`
+	ID                   uuid.UUID  `json:"id"`
+	Url                  string     `json:"url"`
+	Name                 string     `json:"name"`
+	CheckIntervalSeconds int        `json:"check_interval_seconds"`
+	UserID               uuid.UUID  `json:"user_id"`
+	Status               SiteStatus `json:"status"`
+	IsActive             bool       `json:"is_active"`
+	VerifiedAt           *time.Time `json:"verified_at,omitempty"`
+	LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
+	LastStatusCode       *int32     `json:"last_status_code,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 func (s Site) ToResponse() SiteResponse {
-    return SiteResponse{
-        ID:                   s.ID,
-        Url:                  s.Url,
-        Name:                 s.Name,
-        CheckIntervalSeconds: s.CheckIntervalSeconds,
-        UserID:               s.UserID,
-        Status:               s.Status,
-        IsActive:             s.IsActive,
-        VerifiedAt:           s.VerifiedAt,
-        LastCheckedAt:        s.LastCheckedAt,
-        LastStatusCode:       s.LastStatusCode,
-        CreatedAt:            s.CreatedAt,
-        UpdatedAt:            s.UpdatedAt,
-    }
+	return SiteResponse{
+		ID:                   s.ID,
+		Url:                  s.Url,
+		Name:                 s.Name,
+		CheckIntervalSeconds: s.CheckIntervalSeconds,
+		UserID:               s.UserID,
+		Status:               s.Status,
+		IsActive:             s.IsActive,
+		VerifiedAt:           s.VerifiedAt,
+		LastCheckedAt:        s.LastCheckedAt,
+		LastStatusCode:       s.LastStatusCode,
+		CreatedAt:            s.CreatedAt,
+		UpdatedAt:            s.UpdatedAt,
+	}
 }

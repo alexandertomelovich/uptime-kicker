@@ -203,3 +203,24 @@ SELECT
 FROM sites 
 WHERE user_id = $1;
 
+-- name: GetSiteWithOwner :one
+SELECT
+    s.id,
+    s.url,
+    s.name,
+    s.check_interval_seconds,
+    s.user_id,
+    s.status,
+    s.last_status_code,
+    s.last_checked_at,
+    s.response_time_ms,
+    s.is_active,
+    s.verified_at,
+    s.verification_token,
+    s.created_at,
+    s.updated_at,
+    u.telegram_id AS owner_telegram_id
+FROM sites s
+JOIN users u ON u.id = s.user_id
+WHERE s.id = $1;
+

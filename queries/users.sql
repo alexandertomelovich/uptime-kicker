@@ -72,12 +72,12 @@ WHERE telegram_id = $1;
 -- name: UpdateUser :one
 UPDATE users
 SET 
-    email = COALESCE($1, email),
-    name = COALESCE($2, name),
-    password_hash = COALESCE($3, password_hash),
-    role = COALESCE($4, role),
+    email = COALESCE(sqlc.narg('email'), email),
+    name = COALESCE(sqlc.narg('name'), name),
+    password_hash = COALESCE(sqlc.narg('password_hash'), password_hash),
+    role = COALESCE(sqlc.narg('role'), role),
     updated_at = NOW()
-WHERE id = $5
+WHERE id = sqlc.arg('id')
 RETURNING id;
 
 -- name: DeleteUser :one
