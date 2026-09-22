@@ -26,10 +26,10 @@ func (s *CheckerService) doCheck(id int, job CheckJob) {
 
 	req, err := http.NewRequestWithContext(ctx, "GET", job.URL, nil)
 	if err != nil {
-		s.resultsChan <- CheckResult{
+		s.emitResult(CheckResult{
 			SiteID: job.SiteID,
 			Err:    err,
-		}
+		})
 		return
 	}
 
@@ -38,19 +38,29 @@ func (s *CheckerService) doCheck(id int, job CheckJob) {
 	start := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
-		s.resultsChan <- CheckResult{
+		s.emitResult(CheckResult{
 			SiteID:  job.SiteID,
 			Latency: time.Since(start),
 			Err:     err,
-		}
+		})
 		return
 	}
 	defer resp.Body.Close()
 
-	s.resultsChan <- CheckResult{
+	s.emitResult(CheckResult{
 		SiteID:     job.SiteID,
 		StatusCode: resp.StatusCode,
 		Latency:    time.Since(start),
 		Err:        nil,
+	})
+}
+
+// emitResult отправляет результат в канал, не блокируясь навсегда при остановке:
+// если контекст отменён, результат отбрасывается, и воркер может завершиться.
+func (s *CheckerService) emitResult(result CheckResult) {
+	select {
+	case <-s.ctx.Done():
+		return
+	case s.resultsChan <- result:
 	}
 }

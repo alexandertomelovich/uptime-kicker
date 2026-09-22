@@ -22,15 +22,15 @@ func (s *CheckerService) scheduler() {
 func (s *CheckerService) produceJobs() {
 	sites, err := s.repo.GetSitesNeedingCheck(s.ctx, s.limit)
 	if err != nil {
-		log.Printf(err.Error())
+		log.Printf("produceJobs: failed to get sites needing check: %v", err)
 		return
 	}
 	jobs := make([]CheckJob, len(sites))
 
 	for i, site := range sites {
 		jobs[i] = CheckJob{
-			SiteID: site.ID,
-			URL: site.Url,
+			SiteID:   site.ID,
+			URL:      site.Url,
 			Interval: time.Duration(site.CheckIntervalSeconds) * time.Second,
 		}
 	}
@@ -45,4 +45,3 @@ func (s *CheckerService) produceJobs() {
 		}
 	}
 }
-

@@ -60,6 +60,20 @@ func (r *CheckRepository) fromDomain(stat domain.CheckDailyStat) postgres.CheckD
 	}
 }
 
+func (r *CheckRepository) InsertLog(ctx context.Context, log domain.CheckLogsRaw) error {
+	params := postgres.InsertCheckLogParams{
+		SiteID:       log.SiteID,
+		StatusCode:   int32(log.StatusCode),
+		LatencyMs:    int32(log.LatencyMs),
+		ErrorMessage: &log.ErrorMessage,
+	}
+
+	if err := r.queries.InsertCheckLog(ctx, params); err != nil {
+		return fmt.Errorf("repository.InsertLog: %w", err)
+	}
+	return nil
+}
+
 func (r *CheckRepository) AggregateDailyStats(ctx context.Context) error {
 	if err := r.queries.AggregateDailyStats(ctx); err != nil {
 		return fmt.Errorf("repository.AggregateDailyStats: %w", err)

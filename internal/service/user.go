@@ -216,7 +216,10 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (domain.User, e
 
 	user, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return domain.User{}, domain.ErrNotFound
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.User{}, domain.ErrNotFound
+		}
+		return domain.User{}, fmt.Errorf("service.GetByID: %w", err)
 	}
 
 	return user, nil

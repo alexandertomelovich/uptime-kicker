@@ -7,6 +7,8 @@ package postgres
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const aggregateDailyStats = `-- name: AggregateDailyStats :exec
@@ -22,10 +24,10 @@ SELECT
     site_id,
     DATE(checked_at) as log_date,
     COUNT(*) as total_checks,
-    COUNT(*) FILTER (WHERE status_code != 200) as failed_checks,
+    COUNT(*) FILTER (WHERE status_code < 200 OR status_code >= 300) as failed_checks,
     AVG(latency_ms)::INT as avg_latency,
     MAX(latency_ms) as max_latency,
-    ROUND(((COUNT(*) - COUNT(*) FILTER (WHERE status_code != 200))::NUMERIC / COUNT(*)) * 100, 2) as uptime
+    ROUND(((COUNT(*) - COUNT(*) FILTER (WHERE status_code < 200 OR status_code >= 300))::NUMERIC / COUNT(*)) * 100, 2) as uptime
 FROM check_logs_raw
 WHERE checked_at >= CURRENT_DATE - INTERVAL '1 day' AND checked_at < CURRENT_DATE
 GROUP BY site_id, log_date
@@ -38,11 +40,40 @@ func (q *Queries) AggregateDailyStats(ctx context.Context) error {
 }
 
 const clearLogs = `-- name: ClearLogs :exec
-DELETE FROM check_logs_raw 
+DELETE FROM check_logs_raw
 WHERE checked_at < CURRENT_DATE - INTERVAL '1 day'
 `
 
 func (q *Queries) ClearLogs(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, clearLogs)
+	return err
+}
+
+const insertCheckLog = `-- name: InsertCheckLog :exec
+INSERT INTO check_logs_raw (
+    site_id,
+    status_code,
+    latency_ms,
+    error_message,
+    checked_at
+) VALUES (
+    $1, $2, $3, $4, NOW()
+)
+`
+
+type InsertCheckLogParams struct {
+	SiteID       uuid.UUID `json:"site_id"`
+	StatusCode   int32     `json:"status_code"`
+	LatencyMs    int32     `json:"latency_ms"`
+	ErrorMessage *string   `json:"error_message"`
+}
+
+func (q *Queries) InsertCheckLog(ctx context.Context, arg InsertCheckLogParams) error {
+	_, err := q.db.Exec(ctx, insertCheckLog,
+		arg.SiteID,
+		arg.StatusCode,
+		arg.LatencyMs,
+		arg.ErrorMessage,
+	)
 	return err
 }
