@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"health_checker/config"
+	"health_checker/internal/auth"
+	httphandler "health_checker/internal/delivery/http"
 	"health_checker/internal/repository"
 	"health_checker/internal/repository/postgres"
+	appservice "health_checker/internal/service"
 	checkersvc "health_checker/internal/service/checker"
 	cronsvc "health_checker/internal/service/cron"
 	"health_checker/internal/telegram"
@@ -51,9 +54,9 @@ func run() error {
 	queries := postgres.New(pool)
 
 	// --- Репозитории ---
-	// userRepo понадобится при подключении HTTP-handlers (auth/user).
 	siteRepo := repository.NewSiteRepository(queries)
 	checkRepo := repository.NewCheckRepository(queries)
+	userRepo := repository.NewUserRepository(queries)
 
 	// --- Telegram ---
 	bot, err := tgbotapi.NewBotAPI(cfg.Telegram.Token)
@@ -81,8 +84,18 @@ func run() error {
 		return err
 	}
 
+	// --- Аутентификация / Пользователи ---
+	jwtManager := auth.NewJWTManager(
+		cfg.JWT.AccessSecret,
+		cfg.JWT.RefreshSecret,
+		cfg.JWT.AccessTTL,
+		cfg.JWT.RefreshTTL,
+	)
+	userService := appservice.NewUserService(userRepo, sender, jwtManager)
+	userHandler := httphandler.NewUserHandler(userService)
+
 	// --- HTTP ---
-	router := newRouter()
+	router := newRouter(userHandler, jwtManager.AuthMiddleware)
 	srv := &http.Server{
 		Addr:    ":" + cfg.HTTP.Port,
 		Handler: router,
@@ -120,9 +133,8 @@ func run() error {
 	return nil
 }
 
-// newRouter собирает роутер chi с базовыми middleware.
-// Бизнес-роуты будут добавлены на следующем шаге.
-func newRouter() http.Handler {
+// newRouter собирает роутер chi с базовыми middleware и маршрутами handler-ов.
+func newRouter(userHandler *httphandler.UserHandler, authMiddleware func(http.Handler) http.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -136,6 +148,8 @@ func newRouter() http.Handler {
 			log.Printf("healthz: failed to write response: %v", err)
 		}
 	})
+
+	userHandler.Routes(r, authMiddleware)
 
 	return r
 }
