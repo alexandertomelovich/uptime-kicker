@@ -334,23 +334,6 @@ func (s *UserService) RefreshToken(ctx context.Context, refreshToken string) (*a
 	return tokenPair, nil
 }
 
-func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (domain.User, error) {
-	claims, err := s.checkAuth(ctx)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("service.GetUserByID: %w", err)
-	}
-
-	if !claims.Role.IsAdmin() {
-		return domain.User{}, domain.ErrAccessDenied
-	}
-
-	user, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return domain.User{}, fmt.Errorf("service.GetUserByID: %w", err)
-	}
-	return user, nil
-}
-
 func (s *UserService) sendWelcome(user *domain.User) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

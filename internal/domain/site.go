@@ -36,6 +36,17 @@ type Site struct {
 	OwnerTelegramID int64 `json:"owner_telegram_id,omitempty"`
 }
 
+// SiteUpdate описывает частичное обновление сайта.
+// nil-поле означает «не менять», не-nil — «записать это значение».
+type SiteUpdate struct {
+	ID                   uuid.UUID
+	UserID               uuid.UUID
+	Url                  *string
+	Name                 *string
+	CheckIntervalSeconds *int
+	IsActive             *bool
+}
+
 type SiteStats struct {
 	TotalSites      int     `json:"total_sites"`
 	UpSites         int     `json:"up_sites"`

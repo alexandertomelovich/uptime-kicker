@@ -24,7 +24,7 @@ type SiteRepository interface {
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
 	GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error)
 	UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
-	Update(ctx context.Context, site domain.Site) (domain.Site, error)
+	Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
 	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error)
 }
 
@@ -177,6 +177,27 @@ func (s *SiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domai
 		return domain.SiteStats{}, fmt.Errorf("service.GetSiteStats: %w", err)
 	}
 	return stats, nil
+}
+
+func (s *SiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+	site, err := s.repo.GetByID(ctx, update.ID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.Site{}, domain.ErrNotFound
+		}
+		return domain.Site{}, fmt.Errorf("service.Update: %w", err)
+	}
+
+	if site.UserID != update.UserID {
+		return domain.Site{}, domain.ErrSiteNotBelongUser
+	}
+
+	updated, err := s.repo.Update(ctx, update)
+	if err != nil {
+		return domain.Site{}, fmt.Errorf("service.Update: %w", err)
+	}
+
+	return updated, nil
 }
 
 func (s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
