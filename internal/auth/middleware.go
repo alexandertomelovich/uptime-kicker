@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"health_checker/internal/domain"
 	"net/http"
 	"strings"
@@ -11,6 +12,8 @@ type contextKey string
 
 const UserContextKey contextKey = "user"
 
+// AuthMiddleware проверяет access-токен из заголовка Authorization
+// (формат "Bearer <token>") и кладёт валидированные Claims в контекст запроса.
 func (m *JWTManager) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -19,17 +22,17 @@ func (m *JWTManager) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-			http.Error(w, "Invalid authorization header format", http.StatusUnauthorized)
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || strings.TrimSpace(parts[1]) == "" {
+			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
 			return
 		}
 
-		tokenString := parts[1]
+		tokenString := strings.TrimSpace(parts[1])
 
 		claims, err := m.ValidateAccessToken(tokenString)
 		if err != nil {
-			if err == ErrExpiredToken {
+			if errors.Is(err, ErrExpiredToken) {
 				http.Error(w, "Token expired", http.StatusUnauthorized)
 				return
 			}
