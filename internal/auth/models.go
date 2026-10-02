@@ -7,11 +7,20 @@ import (
 	"github.com/google/uuid"
 )
 
+// TokenType различает access- и refresh-токены.
+type TokenType string
+
+const (
+	TokenTypeAccess  TokenType = "access"
+	TokenTypeRefresh TokenType = "refresh"
+)
+
 type Claims struct {
 	UserID     uuid.UUID   `json:"user_id"`
 	Email      string      `json:"email"`
 	TelegramID int64       `json:"telegram_id,omitempty"`
 	Role       domain.Role `json:"role"`
+	TokenType  TokenType   `json:"token_type"`
 	jwt.RegisteredClaims
 }
 

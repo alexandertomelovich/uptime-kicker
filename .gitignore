@@ -1,0 +1,24 @@
+"# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+server
+
+# Test binary / coverage
+*.test
+*.out
+
+# Go workspace
+go.work
+
+# Environment / secrets
+.env
+
+# Editor
+.idea/
+.vscode/
+*.swp
+"
