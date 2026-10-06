@@ -17,6 +17,7 @@ type UserService interface {
 	Register(ctx context.Context, req service.RegisterRequest) (domain.User, error)
 	Login(ctx context.Context, email, password string) (*auth.TokenPair, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*auth.TokenPair, error)
+	Logout(ctx context.Context, refreshToken string) error
 	GetAll(ctx context.Context) ([]domain.User, error)
 	GetByID(ctx context.Context, id uuid.UUID) (domain.User, error)
 	Update(ctx context.Context, params service.UpdateUserParams) error
@@ -43,6 +44,7 @@ func (h *UserHandler) Routes(r chi.Router, authMiddleware func(http.Handler) htt
 	r.Post("/auth/register", h.Register)
 	r.Post("/auth/login", h.Login)
 	r.Post("/auth/refresh", h.Refresh)
+	r.Post("/auth/logout", h.Logout)
 
 	// Защищённые маршруты пользователей.
 	r.Group(func(r chi.Router) {
@@ -126,6 +128,22 @@ func (h *UserHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, tokens)
+}
+
+// Logout отзывает refresh-сессию. POST /auth/logout
+func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.svc.Logout(r.Context(), req.RefreshToken); err != nil {
+		respondError(w, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetAll возвращает список всех пользователей. GET /users (admin)

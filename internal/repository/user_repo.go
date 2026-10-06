@@ -189,6 +189,21 @@ func (r *UserRepository) Update(ctx context.Context, update domain.UserUpdate) e
 	return nil
 }
 
+// GetAuthData реализует auth.UserProvider: возвращает актуальные email/роль/
+// telegram_id пользователя. Используется при refresh, чтобы не полагаться на
+// данные из старого токена (защита от privilege escalation) и отклонять
+// запросы удалённых пользователей.
+func (r *UserRepository) GetAuthData(ctx context.Context, userID uuid.UUID) (string, domain.Role, int64, error) {
+	userDB, err := r.queries.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", 0, domain.ErrNotFound
+		}
+		return "", "", 0, fmt.Errorf("repository.GetAuthData: %w", err)
+	}
+	return userDB.Email, toDomainRole(userDB.Role), userDB.TelegramID, nil
+}
+
 // roleToDB превращает *domain.Role в *string для pgx, сохраняя nil (не менять поле).
 func roleToDB(role *domain.Role) *string {
 	if role == nil {
