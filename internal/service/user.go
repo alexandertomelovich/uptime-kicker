@@ -31,9 +31,12 @@ type UserService struct {
 	repo       UserRepository
 	notif      notifier.Sender
 	jwtManager *auth.JWTManager
+	// tokenStore нужен для инвалидации всех refresh-сессий пользователя при
+	// смене пароля/роли и удалении аккаунта. Может быть nil (тесты).
+	tokenStore auth.TokenStore
 }
 
-func NewUserService(repo UserRepository, notif notifier.Sender, jwtManager *auth.JWTManager) *UserService {
+func NewUserService(repo UserRepository, notif notifier.Sender, jwtManager *auth.JWTManager, tokenStore auth.TokenStore) *UserService {
 	if repo == nil {
 		panic("UserService: repo is nil")
 	}
@@ -45,6 +48,7 @@ func NewUserService(repo UserRepository, notif notifier.Sender, jwtManager *auth
 		repo:       repo,
 		notif:      notif,
 		jwtManager: jwtManager,
+		tokenStore: tokenStore,
 	}
 }
 
@@ -133,6 +137,7 @@ func (s *UserService) Login(ctx context.Context, email, password string) (*auth.
 	}
 
 	tokens, err := s.jwtManager.GenerateTokenPair(
+		ctx,
 		user.ID,
 		user.Email,
 		user.Role,
@@ -164,6 +169,14 @@ func (s *UserService) Delete(ctx context.Context, id uuid.UUID) error {
 			return err
 		}
 		return fmt.Errorf("service.Delete: %w", err)
+	}
+
+	// Инвалидируем все refresh-сессии удалённого пользователя, чтобы он не мог
+	// обновить токены до истечения access-токена.
+	if s.tokenStore != nil {
+		if err := s.tokenStore.DeleteAllForUser(ctx, id); err != nil {
+			return fmt.Errorf("service.Delete: failed to revoke sessions: %w", err)
+		}
 	}
 	return nil
 }
@@ -323,15 +336,33 @@ func (s *UserService) Update(ctx context.Context, params UpdateUserParams) error
 		return fmt.Errorf("service.Update: %w", err)
 	}
 
+	// Смена пароля или роли должна инвалидировать ранее выданные refresh-сессии:
+	// иначе украденный токен сохраняет действие даже после смены секрета, а в
+	// случае понижения роли клиент продолжит получать access-токены со старой ролью.
+	if s.tokenStore != nil && (params.Password != nil || params.Role != nil) {
+		if err := s.tokenStore.DeleteAllForUser(ctx, params.ID); err != nil {
+			return fmt.Errorf("service.Update: failed to revoke sessions: %w", err)
+		}
+	}
+
 	return nil
 }
 
 func (s *UserService) RefreshToken(ctx context.Context, refreshToken string) (*auth.TokenPair, error) {
-	tokenPair, err := s.jwtManager.RefreshAccessToken(refreshToken)
+	tokenPair, err := s.jwtManager.RefreshAccessToken(ctx, refreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("service.RefreshToken: %w", err)
 	}
 	return tokenPair, nil
+}
+
+// Logout отзывает refresh-сессию пользователя. Повторный вызов с уже
+// отозванным токеном не является ошибкой с точки зрения клиента.
+func (s *UserService) Logout(ctx context.Context, refreshToken string) error {
+	if err := s.jwtManager.RevokeRefreshToken(ctx, refreshToken); err != nil {
+		return fmt.Errorf("service.Logout: %w", err)
+	}
+	return nil
 }
 
 func (s *UserService) sendWelcome(user *domain.User) {

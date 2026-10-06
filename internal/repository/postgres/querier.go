@@ -13,10 +13,14 @@ import (
 type Querier interface {
 	AggregateDailyStats(ctx context.Context) error
 	ClearLogs(ctx context.Context) error
+	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (uuid.UUID, error)
+	DeleteExpiredRefreshTokens(ctx context.Context) error
+	DeleteRefreshToken(ctx context.Context, jti uuid.UUID) error
 	DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UUID, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
+	DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	GetActiveSitesByStatus(ctx context.Context, status *string) ([]Site, error)
 	GetAllSites(ctx context.Context) ([]Site, error)
 	GetAllUsers(ctx context.Context) ([]GetAllUsersRow, error)
@@ -24,6 +28,7 @@ type Querier interface {
 	GetByID(ctx context.Context, id uuid.UUID) (GetByIDRow, error)
 	GetByTelegramID(ctx context.Context, telegramID int64) (GetByTelegramIDRow, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]Site, error)
+	GetRefreshToken(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	GetSiteByID(ctx context.Context, id uuid.UUID) (Site, error)
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (GetSiteStatsRow, error)
 	GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWithOwnerRow, error)

@@ -5,6 +5,8 @@
 package postgres
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -27,6 +29,13 @@ type CheckLogsRaw struct {
 	LatencyMs    int32              `json:"latency_ms"`
 	ErrorMessage *string            `json:"error_message"`
 	CheckedAt    pgtype.Timestamptz `json:"checked_at"`
+}
+
+type RefreshToken struct {
+	Jti       uuid.UUID `json:"jti"`
+	UserID    uuid.UUID `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type Site struct {

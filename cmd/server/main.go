@@ -57,6 +57,7 @@ func run() error {
 	siteRepo := repository.NewSiteRepository(queries)
 	checkRepo := repository.NewCheckRepository(queries)
 	userRepo := repository.NewUserRepository(queries)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(queries)
 
 	// --- Telegram ---
 	bot, err := tgbotapi.NewBotAPI(cfg.Telegram.Token)
@@ -90,8 +91,10 @@ func run() error {
 		cfg.JWT.RefreshSecret,
 		cfg.JWT.AccessTTL,
 		cfg.JWT.RefreshTTL,
+		auth.WithTokenStore(refreshTokenRepo),
+		auth.WithUserProvider(userRepo),
 	)
-	userService := appservice.NewUserService(userRepo, sender, jwtManager)
+	userService := appservice.NewUserService(userRepo, sender, jwtManager, refreshTokenRepo)
 	userHandler := httphandler.NewUserHandler(userService)
 
 	// --- HTTP ---
