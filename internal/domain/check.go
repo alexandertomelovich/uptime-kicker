@@ -7,14 +7,14 @@ import (
 )
 
 type CheckDailyStat struct {
-	ID               int64     `json:"id"`
-	SiteID           uuid.UUID `json:"site_id"`
+	ID               int64      `json:"id"`
+	SiteID           uuid.UUID  `json:"site_id"`
 	Date             *time.Time `json:"date"`
-	TotalChecks      int       `json:"total_checks"`
-	FailedChecks     int       `json:"failed_checks"`
-	AvgLatencyMs     float64   `json:"avg_latency_ms"`
-	MaxLatencyMs     int       `json:"max_latency_ms"`
-	UptimePercentage float64   `json:"uptime_percentage"`
+	TotalChecks      int        `json:"total_checks"`
+	FailedChecks     int        `json:"failed_checks"`
+	AvgLatencyMs     float64    `json:"avg_latency_ms"`
+	MaxLatencyMs     int        `json:"max_latency_ms"`
+	UptimePercentage float64    `json:"uptime_percentage"`
 }
 
 type CheckLogsRaw struct {

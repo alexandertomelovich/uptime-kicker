@@ -58,6 +58,7 @@ func LoadConfig() *Config {
 
 	accessSecret := mustEnv("JWT_ACCESS_SECRET")
 	refreshSecret := mustEnv("JWT_REFRESH_SECRET")
+	telegramToken := mustEnv("TELEGRAM_TOKEN")
 
 	// Секреты подписи access/refresh токенов обязаны различаться: иначе
 	// refresh-токен можно предъявить как access-токен и наоборот (при
@@ -84,7 +85,7 @@ func LoadConfig() *Config {
 			RefreshTTL:    getEnvDuration("JWT_REFRESH_TTL", time.Hour*24*7),
 		},
 		Telegram: TelegramConfig{
-			Token: getEnv("TELEGRAM_TOKEN", "8988502995:AAEFnyifvn-Lgr-GNRNI7arHinm7iou_FfA"),
+			Token: telegramToken,
 		},
 		Checker: CheckerConfig{
 			NumWorkers: getEnvInt("CHECKER_NUM_WORKERS", 5),

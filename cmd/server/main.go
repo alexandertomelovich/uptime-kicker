@@ -37,7 +37,6 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// --- База данных ---
 	pool, err := pgxpool.New(ctx, cfg.DB.URL)
 	if err != nil {
 		return err
@@ -53,13 +52,11 @@ func run() error {
 
 	queries := postgres.New(pool)
 
-	// --- Репозитории ---
 	siteRepo := repository.NewSiteRepository(queries)
 	checkRepo := repository.NewCheckRepository(queries)
 	userRepo := repository.NewUserRepository(queries)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(queries)
 
-	// --- Telegram ---
 	bot, err := tgbotapi.NewBotAPI(cfg.Telegram.Token)
 	if err != nil {
 		return err
@@ -67,9 +64,6 @@ func run() error {
 	sender := telegram.NewSender(bot)
 	log.Printf("telegram bot authorized as @%s", bot.Self.UserName)
 
-	// --- Сервисы ---
-	// userService и siteService (auth/site) будут подключены к HTTP-handlers
-	// на следующем шаге; для каркаса достаточно checker и cron.
 	checker := checkersvc.NewCheckerService(
 		siteRepo,
 		checkRepo,
@@ -85,7 +79,6 @@ func run() error {
 		return err
 	}
 
-	// --- Аутентификация / Пользователи ---
 	jwtManager := auth.NewJWTManager(
 		cfg.JWT.AccessSecret,
 		cfg.JWT.RefreshSecret,
@@ -97,8 +90,16 @@ func run() error {
 	userService := appservice.NewUserService(userRepo, sender, jwtManager, refreshTokenRepo)
 	userHandler := httphandler.NewUserHandler(userService)
 
-	// --- HTTP ---
-	router := newRouter(userHandler, jwtManager.AuthMiddleware)
+	siteService := appservice.NewSiteService(siteRepo, userRepo)
+	siteHandler := httphandler.NewSiteHandler(siteService)
+
+	// --- Telegram-бот (long-polling) ---
+	// Пользователь резолвится по telegram_id напрямую через репозиторий
+	// (метод без admin-claims), а операции над сайтами идут через siteService.
+	telegramHandler := telegram.NewHandler(bot, userRepo, siteService)
+	telegramBot := telegram.NewBot(bot, telegramHandler)
+
+	router := newRouter(userHandler, siteHandler, jwtManager.AuthMiddleware)
 	srv := &http.Server{
 		Addr:    ":" + cfg.HTTP.Port,
 		Handler: router,
@@ -112,18 +113,35 @@ func run() error {
 		}
 	}()
 
-	// --- Ожидание остановки ---
+	// --- Запуск приёма сообщений Telegram ---
+	// Бот работает в отдельной горутине и останавливается по отмене botCtx.
+	botCtx, cancelBot := context.WithCancel(context.Background())
+	defer cancelBot()
+
+	botErr := make(chan error, 1)
+	go func() {
+		if err := telegramBot.Run(botCtx); err != nil && !errors.Is(err, context.Canceled) {
+			botErr <- err
+		}
+	}()
+	log.Println("telegram bot started (long-polling)")
+
 	select {
 	case <-ctx.Done():
 		log.Println("shutdown signal received")
 	case err := <-serverErr:
 		log.Printf("http server error: %v", err)
 		return err
+	case err := <-botErr:
+		log.Printf("telegram bot error: %v", err)
+		return err
 	}
 
-	// --- Graceful shutdown ---
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelShutdown()
+
+	// Останавливаем приём обновлений Telegram до закрытия пула БД.
+	cancelBot()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("http server shutdown error: %v", err)
@@ -136,12 +154,10 @@ func run() error {
 	return nil
 }
 
-// newRouter собирает роутер chi с базовыми middleware и маршрутами handler-ов.
-func newRouter(userHandler *httphandler.UserHandler, authMiddleware func(http.Handler) http.Handler) http.Handler {
+func newRouter(userHandler *httphandler.UserHandler, siteHandler *httphandler.SiteHandler, authMiddleware func(http.Handler) http.Handler) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
@@ -153,6 +169,7 @@ func newRouter(userHandler *httphandler.UserHandler, authMiddleware func(http.Ha
 	})
 
 	userHandler.Routes(r, authMiddleware)
+	siteHandler.Routes(r, authMiddleware)
 
 	return r
 }

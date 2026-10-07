@@ -188,20 +188,17 @@ func (r *SiteRepository) UpdateSiteStatus(ctx context.Context, params postgres.U
 	return r.toDomain(updated), nil
 }
 
-func (r *SiteRepository) Update(ctx context.Context, site domain.Site) (domain.Site, error) {
+func (r *SiteRepository) Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
 	params := postgres.UpdateSiteParams{
-		ID:     site.ID,
-		UserID: site.UserID,
+		ID:       update.ID,
+		UserID:   update.UserID,
+		Url:      update.Url,
+		Name:     update.Name,
+		IsActive: update.IsActive,
 	}
 
-	if site.Url != "" {
-		params.Url = &site.Url
-	}
-	if site.Name != "" {
-		params.Name = &site.Name
-	}
-	if site.CheckIntervalSeconds > 0 {
-		v := int32(site.CheckIntervalSeconds)
+	if update.CheckIntervalSeconds != nil {
+		v := int32(*update.CheckIntervalSeconds)
 		params.CheckIntervalSeconds = &v
 	}
 
