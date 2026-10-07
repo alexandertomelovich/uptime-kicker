@@ -81,12 +81,9 @@ func (r *CheckRepository) AggregateDailyStats(ctx context.Context) error {
 	return nil
 }
 
-func (r *CheckRepository) ClearLogs(ctx context.Context)error {
+func (r *CheckRepository) ClearLogs(ctx context.Context) error {
 	if err := r.queries.ClearLogs(ctx); err != nil {
 		return fmt.Errorf("repository.ClearLogs: %w", err)
 	}
 	return nil
 }
-
-
-

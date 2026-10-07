@@ -49,4 +49,3 @@ type UserUpdate struct {
 	PasswordHash *string
 	Role         *Role
 }
-
