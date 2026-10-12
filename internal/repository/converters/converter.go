@@ -48,15 +48,11 @@ func NumericToFloat64(n pgtype.Numeric) float64 {
 		return 0
 	}
 
-	var s string
-	err := n.Scan(&s)
-	if err != nil {
+	fv, err := n.Float64Value()
+	if err != nil || !fv.Valid {
 		return 0
 	}
-
-	var f float64
-	_, err = fmt.Sscan(s, &f)
-	return f
+	return fv.Float64
 }
 
 func Float64ToNumeric(f float64) pgtype.Numeric {
