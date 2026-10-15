@@ -16,12 +16,12 @@ import (
 
 // Handler обрабатывает входящие сообщения и нажатия инлайн-кнопок.
 type Handler struct {
-	api   *tgbotapi.BotAPI
+	api   BotAPI
 	users UserProvider
 	sites SiteService
 }
 
-func NewHandler(api *tgbotapi.BotAPI, users UserProvider, sites SiteService) *Handler {
+func NewHandler(api BotAPI, users UserProvider, sites SiteService) *Handler {
 	if api == nil {
 		panic("telegram.Handler: api is nil")
 	}

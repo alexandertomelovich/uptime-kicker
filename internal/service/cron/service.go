@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
-	"github.com/robfig/cron"
+	cron "github.com/netresearch/go-cron"
 )
+
+// dailyStatsSpec — расписание агрегации дневной статистики (каждый день в 00:05).
+const dailyStatsSpec = "5 0 * * *"
 
 // CheckRepository описывает операции над статистикой проверок, нужные cron-сервису.
 type CheckRepository interface {
@@ -17,39 +21,58 @@ type CheckRepository interface {
 type DailyStatsService struct {
 	repo CheckRepository
 	cron *cron.Cron
+
+	// mu защищает started от гонок StartCron/StopCron.
+	mu sync.Mutex
+	// started отражает, был ли планировщик запущен. Проверять это через
+	// cron.Entries() нельзя: реализация возвращает непустой (не-nil) срез
+	// даже для пустого планировщика, из-за чего первый же запуск ошибочно
+	// считался повторным.
+	started bool
 }
 
 func NewDailyStatsService(repo CheckRepository) *DailyStatsService {
 	return &DailyStatsService{
 		repo: repo,
-		cron: cron.New(),
+		cron: cron.New(
+			// SkipIfStillRunning не даёт перекрываться прогонам одной задачи,
+			// если предыдущий ещё не завершился.
+			cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger)),
+		),
 	}
 }
 
 func (s *DailyStatsService) StartCron() error {
-	if s.cron != nil && s.cron.Entries() != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.started {
 		return fmt.Errorf("cron already started")
 	}
 
-	if err := s.cron.AddFunc("5 0 * * *", func() {
-		s.ExecuteDailyCheck()
-	}); err != nil {
+	if _, err := s.cron.AddFunc(dailyStatsSpec, s.ExecuteDailyCheck); err != nil {
 		return fmt.Errorf("failed to schedule cron job: %w", err)
 	}
 
 	s.cron.Start()
+	s.started = true
 	return nil
 }
 
+// StopCron останавливает планировщик и дожидается завершения активных задач.
+//
+// cron.Stop() возвращает контекст, который отменяется, когда все запущенные
+// задачи завершились. Дополнительно уважается переданный ctx (таймаут/отмена),
+// чтобы вызов не мог зависнуть навсегда.
 func (s *DailyStatsService) StopCron(ctx context.Context) {
-	s.cron.Stop()
-	select {
-	case <-ctx.Done():
-		log.Println("Cron stopped with context cancellation")
-	case <-time.After(5 * time.Second):
-		log.Println("Cron stopped with timeout")
-	}
+	done := s.cron.Stop()
 
+	select {
+	case <-done.Done():
+		log.Println("Cron stopped gracefully")
+	case <-ctx.Done():
+		log.Printf("Cron stop interrupted by context: %v", ctx.Err())
+	}
 }
 
 func (s *DailyStatsService) ExecuteDailyCheck() {
