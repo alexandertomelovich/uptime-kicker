@@ -19,6 +19,13 @@ type mockSiteRepo struct {
 	mu       sync.Mutex
 	sites    []domain.Site
 	statuses map[uuid.UUID]domain.SiteStatus
+
+	// lastParams — аргументы последнего UpdateSiteStatus (проверяется в тестах).
+	lastParams postgres.UpdateSiteStatusParams
+	// updateErr позволяет смоделировать ошибку БД при обновлении статуса.
+	updateErr error
+	// getSitesErr позволяет смоделировать ошибку при выборке сайтов.
+	getSitesErr error
 }
 
 func newMockSiteRepo(sites ...domain.Site) *mockSiteRepo {
@@ -35,7 +42,10 @@ func newMockSiteRepo(sites ...domain.Site) *mockSiteRepo {
 func (m *mockSiteRepo) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if len(m.sites) > limit {
+	if m.getSitesErr != nil {
+		return nil, m.getSitesErr
+	}
+	if limit > 0 && len(m.sites) > limit {
 		return m.sites[:limit], nil
 	}
 	return m.sites, nil
@@ -55,10 +65,21 @@ func (m *mockSiteRepo) GetByIDWithOwner(ctx context.Context, id uuid.UUID) (doma
 func (m *mockSiteRepo) UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.lastParams = params
+	if m.updateErr != nil {
+		return domain.Site{}, m.updateErr
+	}
 	if params.Status != nil {
 		m.statuses[params.ID] = domain.SiteStatus(*params.Status)
 	}
 	return domain.Site{ID: params.ID}, nil
+}
+
+// statusOf возвращает текущий «сохранённый» статус сайта.
+func (m *mockSiteRepo) statusOf(id uuid.UUID) domain.SiteStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.statuses[id]
 }
 
 type mockCheckRepo struct {
@@ -70,6 +91,28 @@ func (m *mockCheckRepo) InsertLog(ctx context.Context, log domain.CheckLogsRaw) 
 	return nil
 }
 
+func (m *mockCheckRepo) count() int64 {
+	return atomic.LoadInt64(&m.inserts)
+}
+
+// capturingCheckRepo — CheckRepository, который запоминает вставленные логи и
+// умеет имитировать ошибку вставки.
+type capturingCheckRepo struct {
+	mu   sync.Mutex
+	logs []domain.CheckLogsRaw
+	err  error
+}
+
+func (m *capturingCheckRepo) InsertLog(ctx context.Context, log domain.CheckLogsRaw) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	m.logs = append(m.logs, log)
+	return nil
+}
+
 type mockSender struct {
 	sent int64
 }
@@ -77,6 +120,30 @@ type mockSender struct {
 func (m *mockSender) Send(ctx context.Context, message notifier.Message) error {
 	atomic.AddInt64(&m.sent, 1)
 	return nil
+}
+
+// capturingSender — notifier.Sender, который запоминает сообщения и умеет
+// имитировать ошибку отправки.
+type capturingSender struct {
+	mu       sync.Mutex
+	messages []notifier.Message
+	err      error
+}
+
+func (m *capturingSender) Send(ctx context.Context, message notifier.Message) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	m.messages = append(m.messages, message)
+	return nil
+}
+
+func (m *capturingSender) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.messages)
 }
 
 // --- Тесты ---

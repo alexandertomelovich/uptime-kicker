@@ -6,8 +6,21 @@ import (
 	"health_checker/internal/domain"
 	"health_checker/internal/service"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
 )
+
+// BotAPI описывает методы Telegram-клиента, которые нужны Handler.
+//
+// Интерфейс объявлен на стороне потребителя (пакет telegram) и полностью
+// реализуется *tgbotapi.BotAPI, поэтому в проде передаётся реальный клиент,
+// а в тестах — простой мок без сетевых вызовов.
+type BotAPI interface {
+	// Send отправляет сообщение (или иное действие) в чат.
+	Send(c tgbotapi.Chattable) (tgbotapi.Message, error)
+	// Request выполняет произвольный API-запрос (например, answerCallbackQuery).
+	Request(c tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
+}
 
 // UserProvider резолвит пользователя по telegram_id.
 // Нужен для привязки Telegram-аккаунта к внутреннему пользователю без
