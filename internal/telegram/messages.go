@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"health_checker/internal/domain"
+	"health_checker/internal/notifier"
 )
 
 // statusEmoji возвращает эмодзи для статуса сайта.
@@ -24,8 +25,9 @@ func statusEmoji(s domain.SiteStatus) string {
 }
 
 // formatSiteLine форматирует одну строку со сайтом для списка.
+// Имя и URL приходят от пользователя, поэтому экранируются для HTML.
 func formatSiteLine(s domain.SiteResponse) string {
-	line := fmt.Sprintf("%s %s — %s", statusEmoji(s.Status), s.Name, s.Url)
+	line := fmt.Sprintf("%s %s — %s", statusEmoji(s.Status), notifier.EscapeHTML(s.Name), notifier.EscapeHTML(s.Url))
 	if !s.IsActive {
 		line += " (неактивен)"
 	}
@@ -35,7 +37,7 @@ func formatSiteLine(s domain.SiteResponse) string {
 // formatSiteList формирует текстовый список сайтов пользователя.
 func formatSiteList(sites []domain.SiteResponse) string {
 	if len(sites) == 0 {
-		return "У вас пока нет сайтов.\n\nДобавьте первый: /add <url>"
+		return "У вас пока нет сайтов.\n\nДобавьте первый: /add &lt;url&gt;"
 	}
 
 	var b strings.Builder
@@ -43,15 +45,16 @@ func formatSiteList(sites []domain.SiteResponse) string {
 	for i, s := range sites {
 		fmt.Fprintf(&b, "%d. %s\n", i+1, formatSiteLine(s))
 	}
-	b.WriteString("\nПодробнее о сайте: /status <id>")
+	b.WriteString("\nПодробнее о сайте: /status &lt;id&gt;")
 	return b.String()
 }
 
 // formatSiteDetail формирует детальную карточку сайта.
+// Имя и URL приходят от пользователя, поэтому экранируются для HTML.
 func formatSiteDetail(s domain.Site) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s %s\n", statusEmoji(s.Status), s.Name)
-	fmt.Fprintf(&b, "URL: %s\n", s.Url)
+	fmt.Fprintf(&b, "%s %s\n", statusEmoji(s.Status), notifier.EscapeHTML(s.Name))
+	fmt.Fprintf(&b, "URL: %s\n", notifier.EscapeHTML(s.Url))
 	fmt.Fprintf(&b, "Статус: %s\n", s.Status)
 	fmt.Fprintf(&b, "Интервал проверки: %d сек\n", s.CheckIntervalSeconds)
 	fmt.Fprintf(&b, "Активен: %t\n", s.IsActive)
@@ -67,7 +70,7 @@ func formatSiteDetail(s domain.Site) string {
 		fmt.Fprintf(&b, "Время ответа: %d мс\n", *s.ResponseTimeMs)
 	}
 	if !s.IsActive && s.VerifiedAt == nil {
-		b.WriteString("\n⚠️ Сайт не подтверждён. Используйте /verify <id> <token>")
+		b.WriteString("\n⚠️ Сайт не подтверждён. Используйте /verify &lt;id&gt; &lt;token&gt;")
 	}
 	return b.String()
 }
@@ -85,15 +88,18 @@ func formatStats(s domain.SiteStats) string {
 	)
 }
 
+// helpText уходит с ParseMode=HTML, поэтому плейсхолдеры записаны
+// HTML-сущностями: "сырые" "<url>"/"<id>"/"<token>" Telegram принял бы за
+// неизвестные теги и отверг бы всё сообщение.
 const helpText = `🤖 Uptime Kicker — бот мониторинга сайтов.
 
 Доступные команды:
 /start — приветствие
-/add <url> [name] — добавить сайт
+/add &lt;url&gt; [name] — добавить сайт
 /list — список ваших сайтов
-/status <id> — подробная информация о сайте
-/remove <id> — удалить сайт
-/verify <id> <token> — подтвердить владение сайтом
+/status &lt;id&gt; — подробная информация о сайте
+/remove &lt;id&gt; — удалить сайт
+/verify &lt;id&gt; &lt;token&gt; — подтвердить владение сайтом
 /stats — статистика
 /help — эта справка
 

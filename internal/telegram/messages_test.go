@@ -225,3 +225,101 @@ func TestFormatStats(t *testing.T) {
 		t.Errorf("среднее время должно округляться: %q", got)
 	}
 }
+
+// --- Экранирование пользовательских данных (сообщения уходят с ParseMode=HTML) ---
+
+// Имя и URL сайта задаёт пользователь, поэтому в тексте сообщения они должны
+// быть экранированы, а не попадать в HTML-разметку как есть.
+const (
+	injectionName = `<b>hack</b>`
+	injectionURL  = `https://x/?q=<script>&y="1"`
+)
+
+// Строка списка не содержит «сырых» тегов, но содержит их экранированные версии.
+func TestFormatSiteLine_EscapesUserData(t *testing.T) {
+	line := formatSiteLine(domain.SiteResponse{
+		Name:     injectionName,
+		Url:      injectionURL,
+		Status:   domain.StatusUp,
+		IsActive: true,
+	})
+
+	if strings.Contains(line, "<b>") || strings.Contains(line, "<script>") {
+		t.Errorf("в строке осталась неэкранированная разметка: %q", line)
+	}
+	if !strings.Contains(line, "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("имя должно быть экранировано: %q", line)
+	}
+	if !strings.Contains(line, "&lt;script&gt;&amp;y=") {
+		t.Errorf("URL должен быть экранирован: %q", line)
+	}
+}
+
+// Список сайтов экранирует имена и URL каждой строки.
+func TestFormatSiteList_EscapesUserData(t *testing.T) {
+	got := formatSiteList([]domain.SiteResponse{
+		{Name: injectionName, Url: injectionURL, Status: domain.StatusUp, IsActive: true},
+	})
+
+	if strings.Contains(got, "<b>") || strings.Contains(got, "<script>") {
+		t.Errorf("в списке осталась неэкранированная разметка: %q", got)
+	}
+	if !strings.Contains(got, "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("имя в списке должно быть экранировано: %q", got)
+	}
+}
+
+// Детальная карточка экранирует имя и URL, но не ломает остальные поля.
+func TestFormatSiteDetail_EscapesUserData(t *testing.T) {
+	site := domain.Site{
+		ID:     uuid.New(),
+		Name:   injectionName,
+		Url:    injectionURL,
+		Status: domain.StatusUp,
+	}
+
+	got := formatSiteDetail(site)
+
+	if strings.Contains(got, "<b>") || strings.Contains(got, "<script>") {
+		t.Errorf("в карточке осталась неэкранированная разметка: %q", got)
+	}
+	if !strings.Contains(got, "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("имя должно быть экранировано: %q", got)
+	}
+	if !strings.Contains(got, "URL: https://x/?q=&lt;script&gt;&amp;y=") {
+		t.Errorf("URL должен быть экранирован: %q", got)
+	}
+	if !strings.Contains(got, site.ID.String()) {
+		t.Errorf("ID должен остаться в карточке: %q", got)
+	}
+}
+
+// Любой текст, уходящий с ParseMode=HTML, не должен содержать «сырых» угловых
+// скобок: Telegram парсит их как разметку, а неизвестный тег — это отказ
+// отправки целиком. Проверяем и статические подсказки, и функции форматирования.
+func TestMessageTexts_HaveNoRawMarkup(t *testing.T) {
+	site := domain.Site{ID: uuid.New(), Name: injectionName, Url: injectionURL, Status: domain.StatusUp}
+	unverified := site
+	unverified.IsActive = false
+
+	texts := []struct {
+		name string
+		text string
+	}{
+		{"welcomeText", welcomeText},
+		{"helpText", helpText},
+		{"пустой список", formatSiteList(nil)},
+		{"список", formatSiteList([]domain.SiteResponse{{Name: injectionName, Url: injectionURL, Status: domain.StatusUp, IsActive: true}})},
+		{"карточка", formatSiteDetail(site)},
+		{"неподтверждённый сайт", formatSiteDetail(unverified)},
+		{"статистика", formatStats(domain.SiteStats{TotalSites: 1})},
+	}
+
+	for _, tc := range texts {
+		t.Run(tc.name, func(t *testing.T) {
+			if strings.ContainsAny(tc.text, "<>") {
+				t.Errorf("в тексте остались сырые угловые скобки: %q", tc.text)
+			}
+		})
+	}
+}

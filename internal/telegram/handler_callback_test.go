@@ -242,3 +242,55 @@ func TestHandleCallback_ToggleError(t *testing.T) {
 		t.Errorf("ожидалась ошибка изменения, got %q", api.lastText())
 	}
 }
+
+// --- Экранирование пользовательских данных в HTML-сообщениях ---
+
+// Имя сайта из callback-сообщения (toggle) экранируется: оно пришло от пользователя.
+func TestHandleCallback_Toggle_EscapesName(t *testing.T) {
+	user := registeredUser(testTelegramID)
+	siteID := uuid.New()
+	sites := &mockSites{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return ownedSite(id, user.user.ID, true), nil
+		},
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+			return domain.Site{ID: update.ID, IsActive: *update.IsActive, Name: `<b>hack</b>`}, nil
+		},
+	}
+	h, api := newTestHandler(user, sites)
+
+	h.HandleCallback(context.Background(), callbackQuery(testTelegramID, testChatID, "toggle:"+siteID.String()))
+
+	text := api.lastText()
+	if strings.Contains(text, "<b>") {
+		t.Errorf("имя не экранировано: %q", text)
+	}
+	if !strings.Contains(text, "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("ожидалось экранированное имя: %q", text)
+	}
+}
+
+// Имя сайта в подтверждении удаления (remove) экранируется.
+func TestHandleCallback_Remove_EscapesNameAndURL(t *testing.T) {
+	user := registeredUser(testTelegramID)
+	siteID := uuid.New()
+	sites := &mockSites{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			site := ownedSite(id, user.user.ID, true)
+			site.Name = `<b>hack</b>`
+			site.Url = `https://s/?a=<i>`
+			return site, nil
+		},
+	}
+	h, api := newTestHandler(user, sites)
+
+	h.HandleCallback(context.Background(), callbackQuery(testTelegramID, testChatID, "remove:"+siteID.String()))
+
+	text := api.lastText()
+	if strings.Contains(text, "<b>") || strings.Contains(text, "<i>") {
+		t.Errorf("в подтверждении осталась неэкранированная разметка: %q", text)
+	}
+	if !strings.Contains(text, "&lt;b&gt;hack&lt;/b&gt;") || !strings.Contains(text, "&lt;i&gt;") {
+		t.Errorf("имя и URL должны быть экранированы: %q", text)
+	}
+}
