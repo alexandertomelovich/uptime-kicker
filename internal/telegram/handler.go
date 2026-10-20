@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"health_checker/internal/domain"
+	"health_checker/internal/notifier"
 	"health_checker/internal/service"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -100,7 +101,7 @@ func (h *Handler) HandleMessage(ctx context.Context, msg *tgbotapi.Message) {
 
 func (h *Handler) cmdAdd(ctx context.Context, chatID int64, userID uuid.UUID, args []string) {
 	if len(args) == 0 {
-		h.reply(chatID, "Использование: /add <url> [name]", nil)
+		h.reply(chatID, "Использование: /add &lt;url&gt; [name]", nil)
 		return
 	}
 
@@ -123,9 +124,9 @@ func (h *Handler) cmdAdd(ctx context.Context, chatID int64, userID uuid.UUID, ar
 	text := fmt.Sprintf(
 		"✅ Сайт добавлен!\n\n%s %s\nID: %s\n\n"+
 			"⚠️ Для запуска проверок подтвердите владение сайтом:\n"+
-			"разместите на нём файл с содержимым-токеном и вызовите /verify <id> <token>.\n\n"+
+			"разместите на нём файл с содержимым-токеном и вызовите /verify &lt;id&gt; &lt;token&gt;.\n\n"+
 			"Токен: %s",
-		statusEmoji(site.Status), site.Name, site.ID, site.VerificationToken,
+		statusEmoji(site.Status), notifier.EscapeHTML(site.Name), site.ID, site.VerificationToken,
 	)
 	h.reply(chatID, text, nil)
 }
@@ -152,7 +153,7 @@ func (h *Handler) cmdList(ctx context.Context, chatID int64, userID uuid.UUID) {
 
 func (h *Handler) cmdStatus(ctx context.Context, chatID int64, userID uuid.UUID, args []string) {
 	if len(args) == 0 {
-		h.reply(chatID, "Использование: /status <id>", nil)
+		h.reply(chatID, "Использование: /status &lt;id&gt;", nil)
 		return
 	}
 
@@ -167,7 +168,7 @@ func (h *Handler) cmdStatus(ctx context.Context, chatID int64, userID uuid.UUID,
 
 func (h *Handler) cmdRemove(ctx context.Context, chatID int64, userID uuid.UUID, args []string) {
 	if len(args) == 0 {
-		h.reply(chatID, "Использование: /remove <id>", nil)
+		h.reply(chatID, "Использование: /remove &lt;id&gt;", nil)
 		return
 	}
 
@@ -177,12 +178,12 @@ func (h *Handler) cmdRemove(ctx context.Context, chatID int64, userID uuid.UUID,
 	}
 
 	kb := confirmRemoveKeyboard(site.ID.String())
-	h.reply(chatID, fmt.Sprintf("Удалить сайт «%s» (%s)?", site.Name, site.Url), &kb)
+	h.reply(chatID, fmt.Sprintf("Удалить сайт «%s» (%s)?", notifier.EscapeHTML(site.Name), notifier.EscapeHTML(site.Url)), &kb)
 }
 
 func (h *Handler) cmdVerify(ctx context.Context, chatID int64, userID uuid.UUID, args []string) {
 	if len(args) < 2 {
-		h.reply(chatID, "Использование: /verify <id> <token>", nil)
+		h.reply(chatID, "Использование: /verify &lt;id&gt; &lt;token&gt;", nil)
 		return
 	}
 
@@ -216,7 +217,7 @@ func (h *Handler) cmdVerify(ctx context.Context, chatID int64, userID uuid.UUID,
 	}
 
 	kb := siteDetailKeyboard(id.String(), true)
-	h.reply(chatID, fmt.Sprintf("✅ Сайт «%s» успешно подтверждён и активен. Проверки запущены.", site.Name), &kb)
+	h.reply(chatID, fmt.Sprintf("✅ Сайт «%s» успешно подтверждён и активен. Проверки запущены.", notifier.EscapeHTML(site.Name)), &kb)
 }
 
 func (h *Handler) cmdStats(ctx context.Context, chatID int64, userID uuid.UUID) {
@@ -255,9 +256,18 @@ func (h *Handler) loadOwnedSite(ctx context.Context, chatID int64, userID uuid.U
 }
 
 // reply отправляет текстовое сообщение, опционально с инлайн-клавиатурой.
+//
+// Сообщение уходит с ParseMode=HTML, поэтому любой текст, пришедший от
+// пользователя или из внешнего мира, обязан попадать в него только через
+// notifier.EscapeHTML: иначе имя вида "<b>" сломает отправку или добавит в
+// сообщение чужую разметку. По той же причине статические плейсхолдеры в
+// подсказках записываются сущностями (/add &lt;url&gt;), а не как "<url>":
+// Telegram парсит их как неизвестный тег и отвергает всё сообщение.
+// Текст инлайн-кнопок HTML не парсится, поэтому имена в клавиатурах
+// (keyboards.go) экранировать не нужно.
 func (h *Handler) reply(chatID int64, text string, kb *tgbotapi.InlineKeyboardMarkup) {
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = "HTML"
+	msg.ParseMode = notifier.ParseModeHTML
 	if kb != nil {
 		msg.ReplyMarkup = *kb
 	}

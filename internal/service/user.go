@@ -378,10 +378,12 @@ func (s *UserService) sendWelcome(user *domain.User) {
 				"• Добавлять сайты для мониторинга\n"+
 				"• Получать уведомления о сбоях\n"+
 				"• Настраивать интервалы проверки\n\n"+
-				"Начни с команды /add <url>",
-			user.Name,
+				"Начни с команды /add &lt;url&gt;",
+			// Имя задаётся пользователем при регистрации: без экранирования
+			// значение вида "<b>" сломало бы HTML-разметку сообщения.
+			notifier.EscapeHTML(user.Name),
 		),
-		ParseMode: "HTML",
+		ParseMode: notifier.ParseModeHTML,
 	}
 
 	if err := s.notif.Send(ctx, msg); err != nil {
