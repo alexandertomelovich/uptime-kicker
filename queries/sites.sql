@@ -8,11 +8,9 @@ INSERT INTO sites (
     last_status_code,
     last_checked_at,
     response_time_ms,
-    is_active,
-    verified_at,
-    verification_token
+    is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING id;
 
@@ -31,8 +29,6 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites ORDER BY created_at DESC;
@@ -48,8 +44,6 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites WHERE id = $1;
@@ -65,15 +59,13 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites WHERE user_id = $1
 ORDER BY created_at DESC;
 
 -- name: GetActiveSitesByStatus :many
-SELECT 
+SELECT
     id,
     url,
     name,
@@ -84,15 +76,13 @@ SELECT
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
-FROM sites 
+FROM sites
 WHERE is_active = true AND status = $1;
 
 -- name: GetSitesNeedingCheck :many
-SELECT 
+SELECT
     id,
     url,
     name,
@@ -103,14 +93,12 @@ SELECT
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
-FROM sites 
-WHERE is_active = true 
+FROM sites
+WHERE is_active = true
   AND (
-    last_checked_at IS NULL 
+    last_checked_at IS NULL
     OR last_checked_at < NOW() - (check_interval_seconds * INTERVAL '1 second')
   )
 ORDER BY last_checked_at NULLS FIRST
@@ -118,65 +106,13 @@ LIMIT $1;
 
 -- name: UpdateSiteStatus :one
 UPDATE sites
-SET 
+SET
     status = COALESCE($1, status),
     last_status_code = $2,
     last_checked_at = $3,
     response_time_ms = $4,
     updated_at = NOW()
 WHERE id = $5
-RETURNING 
-    id,
-    url,
-    name,
-    check_interval_seconds,
-    user_id,
-    status,
-    last_status_code,
-    last_checked_at,
-    response_time_ms,
-    is_active,
-    verified_at,
-    verification_token,
-    created_at,
-    updated_at;
-
--- name: UpdateSite :one
-UPDATE sites
-SET 
-    url = COALESCE(sqlc.narg('url'), url),
-    name = COALESCE(sqlc.narg('name'), name),
-    check_interval_seconds = COALESCE(sqlc.narg('check_interval_seconds'), check_interval_seconds),
-    is_active = COALESCE(sqlc.narg('is_active'), is_active),
-    updated_at = NOW()
-WHERE id = sqlc.arg('id') AND user_id = sqlc.arg('user_id')
-RETURNING 
-    id,
-    url,
-    name,
-    check_interval_seconds,
-    user_id,
-    status,
-    last_status_code,
-    last_checked_at,
-    response_time_ms,
-    is_active,
-    verified_at,
-    verification_token,
-    created_at,
-    updated_at;
-
--- name: VerifySite :one
-UPDATE sites
-SET
-    status = 'up',
-    is_active = true,
-    verified_at = NOW(),
-    verification_token = NULL,
-    updated_at = NOW()
-WHERE id = sqlc.arg('id')
-  AND user_id = sqlc.arg('user_id')
-  AND verification_token = sqlc.arg('verification_token')
 RETURNING
     id,
     url,
@@ -188,19 +124,40 @@ RETURNING
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
+    created_at,
+    updated_at;
+
+-- name: UpdateSite :one
+UPDATE sites
+SET
+    url = COALESCE(sqlc.narg('url'), url),
+    name = COALESCE(sqlc.narg('name'), name),
+    check_interval_seconds = COALESCE(sqlc.narg('check_interval_seconds'), check_interval_seconds),
+    is_active = COALESCE(sqlc.narg('is_active'), is_active),
+    updated_at = NOW()
+WHERE id = sqlc.arg('id') AND user_id = sqlc.arg('user_id')
+RETURNING
+    id,
+    url,
+    name,
+    check_interval_seconds,
+    user_id,
+    status,
+    last_status_code,
+    last_checked_at,
+    response_time_ms,
+    is_active,
     created_at,
     updated_at;
 
 -- name: GetSiteStats :one
-SELECT 
+SELECT
     COUNT(*) as total_sites,
     COUNT(CASE WHEN status = 'up' THEN 1 END) as up_sites,
     COUNT(CASE WHEN status = 'down' THEN 1 END) as down_sites,
     COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sites,
     AVG(response_time_ms) as avg_response_time
-FROM sites 
+FROM sites
 WHERE user_id = $1;
 
 -- name: GetSiteWithOwner :one
@@ -215,12 +172,9 @@ SELECT
     s.last_checked_at,
     s.response_time_ms,
     s.is_active,
-    s.verified_at,
-    s.verification_token,
     s.created_at,
     s.updated_at,
     u.telegram_id AS owner_telegram_id
 FROM sites s
 JOIN users u ON u.id = s.user_id
 WHERE s.id = $1;
-

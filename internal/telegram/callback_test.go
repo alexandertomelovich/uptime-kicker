@@ -64,8 +64,6 @@ func TestHumanizeError(t *testing.T) {
 	}{
 		{"not belong user", domain.ErrSiteNotBelongUser, "сайт вам не принадлежит"},
 		{"not found", domain.ErrNotFound, "не найдено"},
-		{"already verified", domain.ErrSiteAlreadyVerified, "сайт уже подтверждён"},
-		{"invalid token", domain.ErrInvalidToken, "неверный токен подтверждения"},
 		{"unknown", domain.ErrAccessDenied, "внутренняя ошибка"},
 	}
 

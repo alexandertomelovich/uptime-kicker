@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"health_checker/internal/domain"
@@ -25,7 +23,6 @@ type SiteRepository interface {
 	GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error)
 	UpdateSiteStatus(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
 	Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
-	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error)
 }
 
 type SiteService struct {
@@ -46,14 +43,11 @@ type CreateSiteRequest struct {
 	CheckIntervalSeconds int    `json:"check_interval_seconds"`
 }
 
+// Create создаёт сайт и сразу включает его в мониторинг: статус "pending"
+// означает лишь, что ни одной проверки ещё не было.
 func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
 	if req.CheckIntervalSeconds < 30 {
 		req.CheckIntervalSeconds = 30
-	}
-
-	token, err := generateVerificationToken()
-	if err != nil {
-		return domain.Site{}, fmt.Errorf("%w: %w", domain.ErrTokenGeneration, err)
 	}
 
 	site := domain.Site{
@@ -62,8 +56,7 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 		CheckIntervalSeconds: req.CheckIntervalSeconds,
 		UserID:               userID,
 		Status:               "pending",
-		VerificationToken:    token,
-		IsActive:             false,
+		IsActive:             true,
 	}
 	id, err := s.repo.Create(ctx, site)
 	if err != nil {
@@ -71,33 +64,6 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 	}
 	site.ID = id
 	return site, nil
-}
-
-func (s *SiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
-	site, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return domain.ErrNotFound
-		}
-		return fmt.Errorf("service.VerifySite: %w", err)
-	}
-
-	if site.UserID != userID {
-		return domain.ErrSiteNotBelongUser
-	}
-
-	if site.VerifiedAt != nil {
-		return domain.ErrSiteAlreadyVerified
-	}
-
-	_, err = s.repo.VerifySite(ctx, id, userID, token)
-	if err != nil {
-		if errors.Is(err, domain.ErrInvalidToken) {
-			return domain.ErrInvalidToken
-		}
-		return fmt.Errorf("service.VerifySite: %w", err)
-	}
-	return nil
 }
 
 func (s *SiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
@@ -237,62 +203,6 @@ func (s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]do
 	return sites, nil
 }
 
-func (s *SiteService) UpdateStatus(
-	ctx context.Context,
-	siteID, userID uuid.UUID,
-	newStatus domain.SiteStatus,
-	statusCode int32,
-	responseTimeMs *int,
-) (domain.Site, error) {
-	site, err := s.repo.GetByID(ctx, siteID)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			return domain.Site{}, domain.ErrNotFound
-		}
-		return domain.Site{}, fmt.Errorf("service.UpdateStatus: %w", err)
-	}
-
-	if site.UserID != userID {
-		return domain.Site{}, domain.ErrSiteNotBelongUser
-	}
-
-	if site.VerifiedAt == nil {
-		return domain.Site{}, domain.ErrSiteNotVerified
-	}
-
-	if !site.IsActive {
-		return domain.Site{}, domain.ErrSiteNotActive
-	}
-
-	return s.updateStatusInternal(ctx, site, newStatus, statusCode, responseTimeMs)
-}
-
-func (s *SiteService) updateStatusInternal(
-	ctx context.Context,
-	site domain.Site,
-	newStatus domain.SiteStatus,
-	statusCode int32,
-	responseTimeMs *int,
-) (domain.Site, error) {
-	now := time.Now()
-	statusStr := string(newStatus)
-
-	params := postgres.UpdateSiteStatusParams{
-		Status:         &statusStr,
-		LastStatusCode: &statusCode,
-		LastCheckedAt:  converters.TimeToPgTimestamp(&now),
-		ResponseTimeMs: converters.IntPtrToInt32Ptr(responseTimeMs),
-		ID:             site.ID,
-	}
-
-	updatedSite, err := s.repo.UpdateSiteStatus(ctx, params)
-	if err != nil {
-		return domain.Site{}, fmt.Errorf("service.updateStatusInternal: %w", err)
-	}
-
-	return updatedSite, nil
-}
-
 func (s *SiteService) UpdateStatusByID(
 	ctx context.Context,
 	siteID uuid.UUID,
@@ -324,12 +234,4 @@ func (s *SiteService) UpdateStatusByID(
 	}
 
 	return updatedSite, nil
-}
-
-func generateVerificationToken() (string, error) {
-	bytes := make([]byte, 24)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
 }

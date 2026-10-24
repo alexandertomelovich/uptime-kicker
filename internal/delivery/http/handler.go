@@ -53,15 +53,11 @@ func mapServiceError(err error) (int, string) {
 		return http.StatusForbidden, domain.ErrRoleChangeForbidden.Error()
 	case errors.Is(err, domain.ErrSiteNotBelongUser):
 		return http.StatusForbidden, err.Error()
-	case errors.Is(err, domain.ErrSiteAlreadyVerified):
-		return http.StatusConflict, err.Error()
 	case errors.Is(err, domain.ErrEmailAlreadyExists),
 		errors.Is(err, domain.ErrTelegramAlreadyExists),
 		errors.Is(err, domain.ErrPasswordPolicy),
 		errors.Is(err, domain.ErrInvalidRole),
-		errors.Is(err, domain.ErrSiteNotVerified),
-		errors.Is(err, domain.ErrSiteNotActive),
-		errors.Is(err, domain.ErrInvalidToken):
+		errors.Is(err, domain.ErrSiteNotActive):
 		return http.StatusBadRequest, err.Error()
 	default:
 		log.Printf("http.mapServiceError: unexpected error: %v", err)

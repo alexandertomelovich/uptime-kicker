@@ -22,7 +22,6 @@ type mockSiteRepo struct {
 	getByIDFn         func(ctx context.Context, id uuid.UUID) (domain.Site, error)
 	createFn          func(ctx context.Context, site domain.Site) (uuid.UUID, error)
 	deleteFn          func(ctx context.Context, id, userID uuid.UUID) error
-	verifyFn          func(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error)
 	updateFn          func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
 	updateStatusFn    func(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error)
 	getByUserIDFn     func(ctx context.Context, userID uuid.UUID) ([]domain.Site, error)
@@ -123,13 +122,6 @@ func (m *mockSiteRepo) Update(ctx context.Context, update domain.SiteUpdate) (do
 		return m.updateFn(ctx, update)
 	}
 	return domain.Site{ID: update.ID}, nil
-}
-
-func (m *mockSiteRepo) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error) {
-	if m.verifyFn != nil {
-		return m.verifyFn(ctx, id, userID, token)
-	}
-	return domain.Site{ID: id}, nil
 }
 
 // mockUserRepo — реализация UserRepository для тестов. Сервис сайтов
@@ -265,10 +257,10 @@ func TestSiteService_Create_KeepsValidInterval(t *testing.T) {
 	}
 }
 
-// Новый сайт должен создаваться в статусе pending, неактивным, с
-// сгенерированным verification-токеном и привязанным к создателю. Сервис обязан
-// вернуть сайт с ID, который присвоил репозиторий.
-func TestSiteService_Create_SetsDefaultsAndToken(t *testing.T) {
+// Новый сайт создаётся в статусе pending (ни одной проверки ещё не было),
+// сразу активным и привязанным к создателю. Сервис обязан вернуть сайт с ID,
+// который присвоил репозиторий.
+func TestSiteService_Create_SetsDefaults(t *testing.T) {
 	repo := &mockSiteRepo{}
 	svc := newTestSiteService(repo, nil)
 
@@ -284,38 +276,14 @@ func TestSiteService_Create_SetsDefaultsAndToken(t *testing.T) {
 	if repo.lastCreated.Status != "pending" {
 		t.Errorf("status = %q, want pending", repo.lastCreated.Status)
 	}
-	if repo.lastCreated.IsActive {
-		t.Error("is_active должен быть false")
+	if !repo.lastCreated.IsActive {
+		t.Error("is_active должен быть true: сайт сразу включается в мониторинг")
 	}
 	if repo.lastCreated.UserID != userID {
 		t.Errorf("userID = %v, want %v", repo.lastCreated.UserID, userID)
 	}
-	if repo.lastCreated.VerificationToken == "" {
-		t.Error("verification token не должен быть пустым")
-	}
 	if site.ID == uuid.Nil {
 		t.Error("Create должен вернуть сайт с присвоенным ID")
-	}
-}
-
-// Токен генерируется случайно, поэтому не должен повторяться между вызовами
-// (иначе один пользователь мог бы подтвердить чужой сайт).
-func TestSiteService_Create_TokensAreUnique(t *testing.T) {
-	repo := &mockSiteRepo{}
-	svc := newTestSiteService(repo, nil)
-
-	userID := uuid.New()
-	seen := make(map[string]bool)
-	for i := 0; i < 20; i++ {
-		_, err := svc.Create(context.Background(), CreateSiteRequest{Url: "https://example.com"}, userID)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		tok := repo.lastCreated.VerificationToken
-		if seen[tok] {
-			t.Fatalf("verification token повторяется: %q", tok)
-		}
-		seen[tok] = true
 	}
 }
 
@@ -330,133 +298,6 @@ func TestSiteService_Create_RepoError(t *testing.T) {
 	svc := newTestSiteService(repo, nil)
 
 	_, err := svc.Create(context.Background(), CreateSiteRequest{Url: "https://example.com"}, uuid.New())
-	if !errors.Is(err, errBoom) {
-		t.Fatalf("err = %v, want wrapped errBoom", err)
-	}
-}
-
-// --- VerifySite ---
-
-// Успешный сценарий: сайт существует, принадлежит пользователю, ещё не
-// верифицирован и не проверялся ранее — значит repo.VerifySite должен вызваться.
-func TestSiteService_VerifySite_Success(t *testing.T) {
-	userID := uuid.New()
-	siteID := uuid.New()
-	verifyCalled := false
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: siteID, UserID: userID}, nil
-		},
-		verifyFn: func(ctx context.Context, id, uid uuid.UUID, token string) (domain.Site, error) {
-			verifyCalled = true
-			return domain.Site{ID: id}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	if err := svc.VerifySite(context.Background(), siteID, userID, "token"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !verifyCalled {
-		t.Error("ожидался вызов repo.VerifySite")
-	}
-}
-
-// Если сайт не найден, сервис возвращает ErrNotFound без обращения к VerifySite.
-func TestSiteService_VerifySite_NotFound(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), uuid.New(), "token")
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("err = %v, want ErrNotFound", err)
-	}
-}
-
-// Прочие (не NotFound) ошибки GetByID оборачиваются, а не подменяются на NotFound.
-func TestSiteService_VerifySite_GetErrorWrapped(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, errBoom
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), uuid.New(), "token")
-	if !errors.Is(err, errBoom) {
-		t.Fatalf("err = %v, want wrapped errBoom", err)
-	}
-}
-
-// Верифицировать можно только свой сайт — чужой даёт ErrSiteNotBelongUser.
-func TestSiteService_VerifySite_NotBelongUser(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: uuid.New()}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), uuid.New(), "token")
-	if !errors.Is(err, domain.ErrSiteNotBelongUser) {
-		t.Fatalf("err = %v, want ErrSiteNotBelongUser", err)
-	}
-}
-
-// Повторная верификация уже подтверждённого сайта запрещена (VerifiedAt != nil).
-func TestSiteService_VerifySite_AlreadyVerified(t *testing.T) {
-	userID := uuid.New()
-	now := time.Now()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID, VerifiedAt: &now}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), userID, "token")
-	if !errors.Is(err, domain.ErrSiteAlreadyVerified) {
-		t.Fatalf("err = %v, want ErrSiteAlreadyVerified", err)
-	}
-}
-
-// Неверный токен из репозитория преобразуется в доменную ErrInvalidToken.
-func TestSiteService_VerifySite_InvalidToken(t *testing.T) {
-	userID := uuid.New()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID}, nil
-		},
-		verifyFn: func(ctx context.Context, id, uid uuid.UUID, token string) (domain.Site, error) {
-			return domain.Site{}, domain.ErrInvalidToken
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), userID, "wrong")
-	if !errors.Is(err, domain.ErrInvalidToken) {
-		t.Fatalf("err = %v, want ErrInvalidToken", err)
-	}
-}
-
-// Прочие ошибки VerifySite (кроме ErrInvalidToken) оборачиваются с %w.
-func TestSiteService_VerifySite_VerifyErrorWrapped(t *testing.T) {
-	userID := uuid.New()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID}, nil
-		},
-		verifyFn: func(ctx context.Context, id, uid uuid.UUID, token string) (domain.Site, error) {
-			return domain.Site{}, errBoom
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	err := svc.VerifySite(context.Background(), uuid.New(), userID, "token")
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("err = %v, want wrapped errBoom", err)
 	}
@@ -736,13 +577,13 @@ func TestSiteService_GetByUserID_RepoError(t *testing.T) {
 
 // --- GetByID ---
 
-// Владелец получает свой сайт в виде SiteResponse (без verification-токена).
+// Владелец получает свой сайт в виде SiteResponse.
 func TestSiteService_GetByID_OwnerSuccess(t *testing.T) {
 	siteID := uuid.New()
 	userID := uuid.New()
 	repo := &mockSiteRepo{
 		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: siteID, UserID: userID, VerificationToken: "secret"}, nil
+			return domain.Site{ID: siteID, UserID: userID}, nil
 		},
 	}
 	svc := newTestSiteService(repo, nil)
@@ -964,7 +805,7 @@ func TestSiteService_GetSitesNeedingCheck_Error(t *testing.T) {
 
 // --- Update ---
 
-// Успешное обновление возвращает SiteResponse (без verification-токена).
+// Успешное обновление возвращает SiteResponse.
 func TestSiteService_Update_Success(t *testing.T) {
 	userID := uuid.New()
 	siteID := uuid.New()
@@ -974,7 +815,7 @@ func TestSiteService_Update_Success(t *testing.T) {
 			return domain.Site{ID: siteID, UserID: userID}, nil
 		},
 		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
-			return domain.Site{ID: update.ID, Name: *update.Name, VerificationToken: "secret"}, nil
+			return domain.Site{ID: update.ID, Name: *update.Name}, nil
 		},
 	}
 	svc := newTestSiteService(repo, nil)
@@ -1047,158 +888,6 @@ func TestSiteService_Update_RepoError(t *testing.T) {
 	svc := newTestSiteService(repo, nil)
 
 	_, err := svc.Update(context.Background(), domain.SiteUpdate{ID: uuid.New(), UserID: userID})
-	if !errors.Is(err, errBoom) {
-		t.Fatalf("err = %v, want wrapped errBoom", err)
-	}
-}
-
-// --- UpdateStatus ---
-
-func TestSiteService_UpdateStatus_Success(t *testing.T) {
-	userID := uuid.New()
-	siteID := uuid.New()
-	now := time.Now()
-	code := int32(503)
-	rt := 150
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: siteID, UserID: userID, IsActive: true, VerifiedAt: &now}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	got, err := svc.UpdateStatus(context.Background(), siteID, userID, domain.StatusDown, code, &rt)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got.ID != siteID {
-		t.Errorf("ID = %v, want %v", got.ID, siteID)
-	}
-
-	p := repo.lastParams
-	if p.ID != siteID {
-		t.Errorf("params.ID = %v, want %v", p.ID, siteID)
-	}
-	if p.Status == nil || *p.Status != string(domain.StatusDown) {
-		t.Errorf("params.Status = %v, want down", p.Status)
-	}
-	if p.LastStatusCode == nil || *p.LastStatusCode != code {
-		t.Errorf("params.LastStatusCode = %v, want %d", p.LastStatusCode, code)
-	}
-	if p.ResponseTimeMs == nil || *p.ResponseTimeMs != int32(rt) {
-		t.Errorf("params.ResponseTimeMs = %v, want %d", p.ResponseTimeMs, rt)
-	}
-	if !p.LastCheckedAt.Valid {
-		t.Error("params.LastCheckedAt должен быть валидным")
-	}
-}
-
-func TestSiteService_UpdateStatus_NilResponseTime(t *testing.T) {
-	userID := uuid.New()
-	siteID := uuid.New()
-	now := time.Now()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: siteID, UserID: userID, IsActive: true, VerifiedAt: &now}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	if _, err := svc.UpdateStatus(context.Background(), siteID, userID, domain.StatusUp, 200, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if repo.lastParams.ResponseTimeMs != nil {
-		t.Errorf("params.ResponseTimeMs = %v, want nil", repo.lastParams.ResponseTimeMs)
-	}
-}
-
-func TestSiteService_UpdateStatus_NotFound(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), uuid.New(), domain.StatusUp, 200, nil)
-	if !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("err = %v, want ErrNotFound", err)
-	}
-}
-
-func TestSiteService_UpdateStatus_GetErrorWrapped(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, errBoom
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), uuid.New(), domain.StatusUp, 200, nil)
-	if !errors.Is(err, errBoom) {
-		t.Fatalf("err = %v, want wrapped errBoom", err)
-	}
-}
-
-func TestSiteService_UpdateStatus_NotBelongUser(t *testing.T) {
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: uuid.New(), IsActive: true}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), uuid.New(), domain.StatusUp, 200, nil)
-	if !errors.Is(err, domain.ErrSiteNotBelongUser) {
-		t.Fatalf("err = %v, want ErrSiteNotBelongUser", err)
-	}
-}
-
-func TestSiteService_UpdateStatus_NotVerified(t *testing.T) {
-	userID := uuid.New()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID, IsActive: true, VerifiedAt: nil}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), userID, domain.StatusUp, 200, nil)
-	if !errors.Is(err, domain.ErrSiteNotVerified) {
-		t.Fatalf("err = %v, want ErrSiteNotVerified", err)
-	}
-}
-
-func TestSiteService_UpdateStatus_NotActive(t *testing.T) {
-	userID := uuid.New()
-	now := time.Now()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID, IsActive: false, VerifiedAt: &now}, nil
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), userID, domain.StatusUp, 200, nil)
-	if !errors.Is(err, domain.ErrSiteNotActive) {
-		t.Fatalf("err = %v, want ErrSiteNotActive", err)
-	}
-}
-
-func TestSiteService_UpdateStatus_RepoError(t *testing.T) {
-	userID := uuid.New()
-	now := time.Now()
-	repo := &mockSiteRepo{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: userID, IsActive: true, VerifiedAt: &now}, nil
-		},
-		updateStatusFn: func(ctx context.Context, params postgres.UpdateSiteStatusParams) (domain.Site, error) {
-			return domain.Site{}, errBoom
-		},
-	}
-	svc := newTestSiteService(repo, nil)
-
-	_, err := svc.UpdateStatus(context.Background(), uuid.New(), userID, domain.StatusUp, 200, nil)
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("err = %v, want wrapped errBoom", err)
 	}

@@ -27,14 +27,11 @@ func TestMapServiceError(t *testing.T) {
 		{"access denied", domain.ErrAccessDenied, http.StatusForbidden},
 		{"role change forbidden", domain.ErrRoleChangeForbidden, http.StatusForbidden},
 		{"site not belong user", domain.ErrSiteNotBelongUser, http.StatusForbidden},
-		{"site already verified", domain.ErrSiteAlreadyVerified, http.StatusConflict},
 		{"email exists", domain.ErrEmailAlreadyExists, http.StatusBadRequest},
 		{"telegram exists", domain.ErrTelegramAlreadyExists, http.StatusBadRequest},
 		{"password policy", domain.ErrPasswordPolicy, http.StatusBadRequest},
 		{"invalid role", domain.ErrInvalidRole, http.StatusBadRequest},
-		{"site not verified", domain.ErrSiteNotVerified, http.StatusBadRequest},
 		{"site not active", domain.ErrSiteNotActive, http.StatusBadRequest},
-		{"invalid token", domain.ErrInvalidToken, http.StatusBadRequest},
 	}
 
 	for _, tc := range cases {

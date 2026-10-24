@@ -15,7 +15,6 @@ import (
 // Интерфейс объявлен на стороне потребителя, чтобы упростить подмену в тестах.
 type SiteService interface {
 	Create(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error)
-	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 	GetAllSites(ctx context.Context, userID uuid.UUID) ([]domain.Site, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
@@ -48,7 +47,6 @@ func (h *SiteHandler) Routes(r chi.Router, authMiddleware func(http.Handler) htt
 		r.Get("/sites/{id}", h.GetByID)
 		r.Patch("/sites/{id}", h.Update)
 		r.Delete("/sites/{id}", h.Delete)
-		r.Post("/sites/{id}/verify", h.Verify)
 	})
 }
 
@@ -94,38 +92,6 @@ func (h *SiteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, site)
-}
-
-// Verify подтверждает владение сайтом по токену. POST /sites/{id}/verify
-type verifySiteRequest struct {
-	Token string `json:"token"`
-}
-
-func (h *SiteHandler) Verify(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserID(w, r)
-	if !ok {
-		return
-	}
-
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid site id")
-		return
-	}
-
-	var req verifySiteRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	if err := h.svc.VerifySite(r.Context(), id, userID, req.Token); err != nil {
-		status, msg := mapServiceError(err)
-		respondError(w, status, msg)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetAllSites возвращает все сайты (admin). GET /sites

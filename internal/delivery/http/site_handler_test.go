@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 
 	"health_checker/internal/domain"
@@ -47,88 +46,6 @@ func TestSiteHandler_Create_InvalidBody(t *testing.T) {
 	h := siteRouter(&mockSiteService{}, domain.RoleUser)
 
 	rec := do(h, http.MethodPost, "/sites", `{nope`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
-	}
-}
-
-func TestSiteHandler_Create_TokenGenerationFails(t *testing.T) {
-	svc := &mockSiteService{
-		createFn: func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrTokenGeneration
-		},
-	}
-	h := siteRouter(svc, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites", `{"url":"https://example.com"}`)
-	// ErrTokenGeneration не в списке маппинга -> 500.
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", rec.Code)
-	}
-}
-
-// --- Verify ---
-
-func TestSiteHandler_Verify_Success(t *testing.T) {
-	siteID := uuid.New()
-	svc := &mockSiteService{
-		verifyFn: func(ctx context.Context, id, userID uuid.UUID, token string) error {
-			if id != siteID || userID != testUserID || token != "abc" {
-				t.Errorf("неверные аргументы: id=%v userID=%v token=%q", id, userID, token)
-			}
-			return nil
-		},
-	}
-	h := siteRouter(svc, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites/"+siteID.String()+"/verify", `{"token":"abc"}`)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204 (body=%s)", rec.Code, rec.Body.String())
-	}
-}
-
-func TestSiteHandler_Verify_InvalidSiteID(t *testing.T) {
-	h := siteRouter(&mockSiteService{}, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites/bad-id/verify", `{"token":"abc"}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", rec.Code)
-	}
-}
-
-func TestSiteHandler_Verify_AlreadyVerified(t *testing.T) {
-	svc := &mockSiteService{
-		verifyFn: func(ctx context.Context, id, userID uuid.UUID, token string) error {
-			return domain.ErrSiteAlreadyVerified
-		},
-	}
-	h := siteRouter(svc, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites/"+uuid.New().String()+"/verify", `{"token":"abc"}`)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409", rec.Code)
-	}
-}
-
-func TestSiteHandler_Verify_NotBelongUser(t *testing.T) {
-	svc := &mockSiteService{
-		verifyFn: func(ctx context.Context, id, userID uuid.UUID, token string) error {
-			return domain.ErrSiteNotBelongUser
-		},
-	}
-	h := siteRouter(svc, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites/"+uuid.New().String()+"/verify", `{"token":"abc"}`)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", rec.Code)
-	}
-}
-
-// Verify с битым телом запроса -> 400.
-func TestSiteHandler_Verify_InvalidBody(t *testing.T) {
-	h := siteRouter(&mockSiteService{}, domain.RoleUser)
-
-	rec := do(h, http.MethodPost, "/sites/"+uuid.New().String()+"/verify", `{broken`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
@@ -216,8 +133,7 @@ func TestSiteHandler_GetByUserID_InternalError(t *testing.T) {
 
 // --- GetByID ---
 
-// Успешное чтение своего сайта: проверяем, что handler передаёт userID в сервис
-// и возвращает тело без verification-токена (SiteResponse).
+// Успешное чтение своего сайта: проверяем, что handler передаёт userID в сервис.
 func TestSiteHandler_GetByID_Success(t *testing.T) {
 	id := uuid.New()
 	svc := &mockSiteService{
@@ -244,10 +160,6 @@ func TestSiteHandler_GetByID_Success(t *testing.T) {
 	}
 	if got.ID != id {
 		t.Errorf("ID = %v, want %v", got.ID, id)
-	}
-	// В ответе не должно быть verification-токена (его нет в SiteResponse).
-	if strings.Contains(rec.Body.String(), "verification_token") {
-		t.Errorf("ответ не должен содержать verification_token: %s", rec.Body.String())
 	}
 }
 
@@ -465,7 +377,6 @@ func TestSiteHandler_GetUserID_NoClaims(t *testing.T) {
 		{http.MethodGet, "/sites", ""},
 		{http.MethodGet, "/sites/mine", ""},
 		{http.MethodGet, "/sites/stats", ""},
-		{http.MethodPost, "/sites/" + uuid.New().String() + "/verify", `{"token":"t"}`},
 		{http.MethodPatch, "/sites/" + uuid.New().String(), `{"name":"x"}`},
 		{http.MethodDelete, "/sites/" + uuid.New().String(), ""},
 	}

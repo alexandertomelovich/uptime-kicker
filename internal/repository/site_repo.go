@@ -32,8 +32,6 @@ func (r *SiteRepository) toDomain(siteDB postgres.Site) domain.Site {
 		LastCheckedAt:        converters.PgTimestampToPtr(siteDB.LastCheckedAt),
 		ResponseTimeMs:       siteDB.ResponseTimeMs,
 		IsActive:             converters.SafeBool(siteDB.IsActive),
-		VerifiedAt:           converters.PgTimestampToPtr(siteDB.VerifiedAt),
-		VerificationToken:    converters.SafeString(siteDB.VerificationToken),
 		CreatedAt:            siteDB.CreatedAt.Time,
 		UpdatedAt:            siteDB.UpdatedAt.Time,
 	}
@@ -50,8 +48,6 @@ func (r *SiteRepository) fromDomain(site domain.Site) postgres.CreateSiteParams 
 		LastCheckedAt:        converters.TimeToPgTimestamp(site.LastCheckedAt),
 		ResponseTimeMs:       site.ResponseTimeMs,
 		IsActive:             &site.IsActive,
-		VerificationToken:    &site.VerificationToken,
-		VerifiedAt:           converters.TimeToPgTimestamp(site.VerifiedAt),
 	}
 }
 
@@ -144,8 +140,6 @@ func (r *SiteRepository) GetByIDWithOwner(ctx context.Context, id uuid.UUID) (do
 		LastCheckedAt:        converters.PgTimestampToPtr(row.LastCheckedAt),
 		ResponseTimeMs:       row.ResponseTimeMs,
 		IsActive:             converters.SafeBool(row.IsActive),
-		VerifiedAt:           converters.PgTimestampToPtr(row.VerifiedAt),
-		VerificationToken:    converters.SafeString(row.VerificationToken),
 		CreatedAt:            row.CreatedAt.Time,
 		UpdatedAt:            row.UpdatedAt.Time,
 		OwnerTelegramID:      row.OwnerTelegramID,
@@ -211,24 +205,6 @@ func (r *SiteRepository) Update(ctx context.Context, update domain.SiteUpdate) (
 	}
 
 	return r.toDomain(updated), nil
-}
-
-func (r *SiteRepository) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) (domain.Site, error) {
-	params := postgres.VerifySiteParams{
-		ID:                id,
-		UserID:            userID,
-		VerificationToken: &token,
-	}
-
-	site, err := r.queries.VerifySite(ctx, params)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Site{}, domain.ErrInvalidToken
-		}
-		return domain.Site{}, fmt.Errorf("repository.VerifySite: %w", err)
-	}
-
-	return r.toDomain(site), nil
 }
 
 func (r *SiteRepository) toDomainSlice(sitesDB []postgres.Site) []domain.Site {

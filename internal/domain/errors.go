@@ -13,13 +13,8 @@ var (
 	ErrAdminRoleForbidden    = errors.New("cannot create a user with administrator rights")
 	ErrRoleChangeForbidden   = errors.New("only administrator can change user role")
 	ErrInvalidRole           = errors.New("invalid user role")
-	ErrPasswordPolicy        = errors.New("password does not meet the policy")
+	ErrPasswordPolicy = errors.New("password does not meet the policy")
 
-	ErrSiteNotBelongUser   = errors.New("site does not belong to user")
-	ErrSiteAlreadyVerified = errors.New("site already verified")
-	ErrSiteNotVerified     = errors.New("site not verified")
-	ErrSiteNotActive       = errors.New("site not active")
-
-	ErrInvalidToken    = errors.New("invalid verification token")
-	ErrTokenGeneration = errors.New("failed to generate verification token")
+	ErrSiteNotBelongUser = errors.New("site does not belong to user")
+	ErrSiteNotActive     = errors.New("site not active")
 )

@@ -22,11 +22,9 @@ INSERT INTO sites (
     last_status_code,
     last_checked_at,
     response_time_ms,
-    is_active,
-    verified_at,
-    verification_token
+    is_active
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
 RETURNING id
 `
@@ -41,8 +39,6 @@ type CreateSiteParams struct {
 	LastCheckedAt        pgtype.Timestamptz `json:"last_checked_at"`
 	ResponseTimeMs       *int32             `json:"response_time_ms"`
 	IsActive             *bool              `json:"is_active"`
-	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
-	VerificationToken    *string            `json:"verification_token"`
 }
 
 func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UUID, error) {
@@ -56,8 +52,6 @@ func (q *Queries) CreateSite(ctx context.Context, arg CreateSiteParams) (uuid.UU
 		arg.LastCheckedAt,
 		arg.ResponseTimeMs,
 		arg.IsActive,
-		arg.VerifiedAt,
-		arg.VerificationToken,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -82,7 +76,7 @@ func (q *Queries) DeleteSite(ctx context.Context, arg DeleteSiteParams) (uuid.UU
 }
 
 const getActiveSitesByStatus = `-- name: GetActiveSitesByStatus :many
-SELECT 
+SELECT
     id,
     url,
     name,
@@ -93,11 +87,9 @@ SELECT
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
-FROM sites 
+FROM sites
 WHERE is_active = true AND status = $1
 `
 
@@ -121,8 +113,6 @@ func (q *Queries) GetActiveSitesByStatus(ctx context.Context, status *string) ([
 			&i.LastCheckedAt,
 			&i.ResponseTimeMs,
 			&i.IsActive,
-			&i.VerifiedAt,
-			&i.VerificationToken,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -147,8 +137,6 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites ORDER BY created_at DESC
@@ -174,8 +162,6 @@ func (q *Queries) GetAllSites(ctx context.Context) ([]Site, error) {
 			&i.LastCheckedAt,
 			&i.ResponseTimeMs,
 			&i.IsActive,
-			&i.VerifiedAt,
-			&i.VerificationToken,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -200,8 +186,6 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites WHERE user_id = $1
@@ -228,8 +212,6 @@ func (q *Queries) GetByUserID(ctx context.Context, userID uuid.UUID) ([]Site, er
 			&i.LastCheckedAt,
 			&i.ResponseTimeMs,
 			&i.IsActive,
-			&i.VerifiedAt,
-			&i.VerificationToken,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -254,8 +236,6 @@ SELECT id,
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 FROM sites WHERE id = $1
@@ -275,8 +255,6 @@ func (q *Queries) GetSiteByID(ctx context.Context, id uuid.UUID) (Site, error) {
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
 		&i.IsActive,
-		&i.VerifiedAt,
-		&i.VerificationToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -284,13 +262,13 @@ func (q *Queries) GetSiteByID(ctx context.Context, id uuid.UUID) (Site, error) {
 }
 
 const getSiteStats = `-- name: GetSiteStats :one
-SELECT 
+SELECT
     COUNT(*) as total_sites,
     COUNT(CASE WHEN status = 'up' THEN 1 END) as up_sites,
     COUNT(CASE WHEN status = 'down' THEN 1 END) as down_sites,
     COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sites,
     AVG(response_time_ms) as avg_response_time
-FROM sites 
+FROM sites
 WHERE user_id = $1
 `
 
@@ -327,8 +305,6 @@ SELECT
     s.last_checked_at,
     s.response_time_ms,
     s.is_active,
-    s.verified_at,
-    s.verification_token,
     s.created_at,
     s.updated_at,
     u.telegram_id AS owner_telegram_id
@@ -348,8 +324,6 @@ type GetSiteWithOwnerRow struct {
 	LastCheckedAt        pgtype.Timestamptz `json:"last_checked_at"`
 	ResponseTimeMs       *int32             `json:"response_time_ms"`
 	IsActive             *bool              `json:"is_active"`
-	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
-	VerificationToken    *string            `json:"verification_token"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	OwnerTelegramID      int64              `json:"owner_telegram_id"`
@@ -369,8 +343,6 @@ func (q *Queries) GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWi
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
 		&i.IsActive,
-		&i.VerifiedAt,
-		&i.VerificationToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.OwnerTelegramID,
@@ -379,7 +351,7 @@ func (q *Queries) GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWi
 }
 
 const getSitesNeedingCheck = `-- name: GetSitesNeedingCheck :many
-SELECT 
+SELECT
     id,
     url,
     name,
@@ -390,14 +362,12 @@ SELECT
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
-FROM sites 
-WHERE is_active = true 
+FROM sites
+WHERE is_active = true
   AND (
-    last_checked_at IS NULL 
+    last_checked_at IS NULL
     OR last_checked_at < NOW() - (check_interval_seconds * INTERVAL '1 second')
   )
 ORDER BY last_checked_at NULLS FIRST
@@ -424,8 +394,6 @@ func (q *Queries) GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site
 			&i.LastCheckedAt,
 			&i.ResponseTimeMs,
 			&i.IsActive,
-			&i.VerifiedAt,
-			&i.VerificationToken,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -441,14 +409,14 @@ func (q *Queries) GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site
 
 const updateSite = `-- name: UpdateSite :one
 UPDATE sites
-SET 
+SET
     url = COALESCE($1, url),
     name = COALESCE($2, name),
     check_interval_seconds = COALESCE($3, check_interval_seconds),
     is_active = COALESCE($4, is_active),
     updated_at = NOW()
 WHERE id = $5 AND user_id = $6
-RETURNING 
+RETURNING
     id,
     url,
     name,
@@ -459,8 +427,6 @@ RETURNING
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 `
@@ -495,8 +461,6 @@ func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, e
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
 		&i.IsActive,
-		&i.VerifiedAt,
-		&i.VerificationToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -505,14 +469,14 @@ func (q *Queries) UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, e
 
 const updateSiteStatus = `-- name: UpdateSiteStatus :one
 UPDATE sites
-SET 
+SET
     status = COALESCE($1, status),
     last_status_code = $2,
     last_checked_at = $3,
     response_time_ms = $4,
     updated_at = NOW()
 WHERE id = $5
-RETURNING 
+RETURNING
     id,
     url,
     name,
@@ -523,8 +487,6 @@ RETURNING
     last_checked_at,
     response_time_ms,
     is_active,
-    verified_at,
-    verification_token,
     created_at,
     updated_at
 `
@@ -557,64 +519,6 @@ func (q *Queries) UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusPara
 		&i.LastCheckedAt,
 		&i.ResponseTimeMs,
 		&i.IsActive,
-		&i.VerifiedAt,
-		&i.VerificationToken,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const verifySite = `-- name: VerifySite :one
-UPDATE sites
-SET
-    status = 'up',
-    is_active = true,
-    verified_at = NOW(),
-    verification_token = NULL,
-    updated_at = NOW()
-WHERE id = $1
-  AND user_id = $2
-  AND verification_token = $3
-RETURNING
-    id,
-    url,
-    name,
-    check_interval_seconds,
-    user_id,
-    status,
-    last_status_code,
-    last_checked_at,
-    response_time_ms,
-    is_active,
-    verified_at,
-    verification_token,
-    created_at,
-    updated_at
-`
-
-type VerifySiteParams struct {
-	ID                uuid.UUID `json:"id"`
-	UserID            uuid.UUID `json:"user_id"`
-	VerificationToken *string   `json:"verification_token"`
-}
-
-func (q *Queries) VerifySite(ctx context.Context, arg VerifySiteParams) (Site, error) {
-	row := q.db.QueryRow(ctx, verifySite, arg.ID, arg.UserID, arg.VerificationToken)
-	var i Site
-	err := row.Scan(
-		&i.ID,
-		&i.Url,
-		&i.Name,
-		&i.CheckIntervalSeconds,
-		&i.UserID,
-		&i.Status,
-		&i.LastStatusCode,
-		&i.LastCheckedAt,
-		&i.ResponseTimeMs,
-		&i.IsActive,
-		&i.VerifiedAt,
-		&i.VerificationToken,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

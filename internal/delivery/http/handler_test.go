@@ -101,7 +101,6 @@ func (m *mockUserService) Delete(ctx context.Context, id uuid.UUID) error {
 
 type mockSiteService struct {
 	createFn      func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error)
-	verifyFn      func(ctx context.Context, id, userID uuid.UUID, token string) error
 	deleteFn      func(ctx context.Context, id, userID uuid.UUID) error
 	getAllSitesFn func(ctx context.Context, userID uuid.UUID) ([]domain.Site, error)
 	getByUserIDFn func(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
@@ -119,12 +118,6 @@ func (m *mockSiteService) Create(ctx context.Context, req service.CreateSiteRequ
 		return m.createFn(ctx, req, userID)
 	}
 	return domain.Site{ID: uuid.New(), UserID: userID}, nil
-}
-func (m *mockSiteService) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
-	if m.verifyFn != nil {
-		return m.verifyFn(ctx, id, userID, token)
-	}
-	return nil
 }
 func (m *mockSiteService) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	if m.deleteFn != nil {

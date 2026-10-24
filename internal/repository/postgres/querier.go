@@ -38,7 +38,6 @@ type Querier interface {
 	UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, error)
 	UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (Site, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (uuid.UUID, error)
-	VerifySite(ctx context.Context, arg VerifySiteParams) (Site, error)
 }
 
 var _ Querier = (*Queries)(nil)
