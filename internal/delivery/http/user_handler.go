@@ -2,6 +2,7 @@ package httphandler
 
 import (
 	"context"
+	"errors"
 	"health_checker/internal/auth"
 	"health_checker/internal/domain"
 	"health_checker/internal/service"
@@ -10,6 +11,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+// isInvalidTokenError отличает «плохой refresh-токен» от прочих ошибок:
+// только токенные причины должны отдавать 401, внутренние сбои (например БД)
+// — 500 через mapServiceError, иначе они маскируются под неверный токен.
+func isInvalidTokenError(err error) bool {
+	return errors.Is(err, auth.ErrInvalidToken) ||
+		errors.Is(err, auth.ErrExpiredToken) ||
+		errors.Is(err, auth.ErrInvalidTokenType) ||
+		errors.Is(err, auth.ErrTokenRevoked)
+}
 
 // UserService описывает методы бизнес-логики, необходимые HTTP-слою.
 // Интерфейс объявлен на стороне потребителя, чтобы упростить подмену в тестах.
@@ -123,7 +134,12 @@ func (h *UserHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.svc.RefreshToken(r.Context(), req.RefreshToken)
 	if err != nil {
-		respondError(w, http.StatusUnauthorized, "invalid refresh token")
+		if isInvalidTokenError(err) {
+			respondError(w, http.StatusUnauthorized, "invalid refresh token")
+			return
+		}
+		status, msg := mapServiceError(err)
+		respondError(w, status, msg)
 		return
 	}
 
@@ -139,7 +155,12 @@ func (h *UserHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Logout(r.Context(), req.RefreshToken); err != nil {
-		respondError(w, http.StatusUnauthorized, "invalid refresh token")
+		if isInvalidTokenError(err) {
+			respondError(w, http.StatusUnauthorized, "invalid refresh token")
+			return
+		}
+		status, msg := mapServiceError(err)
+		respondError(w, status, msg)
 		return
 	}
 

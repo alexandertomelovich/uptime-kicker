@@ -136,7 +136,7 @@ func TestUserHandler_Refresh_Success(t *testing.T) {
 	}
 }
 
-// Ошибка refresh -> 401 (handler не различает причины токена).
+// Ошибка refresh из-за токена -> 401.
 func TestUserHandler_Refresh_Invalid(t *testing.T) {
 	svc := &mockUserService{
 		refreshFn: func(ctx context.Context, refreshToken string) (*auth.TokenPair, error) {
@@ -148,6 +148,21 @@ func TestUserHandler_Refresh_Invalid(t *testing.T) {
 	rec := do(h, http.MethodPost, "/auth/refresh", `{"refresh_token":"x"}`)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+// Внутренняя ошибка при refresh -> 500, а не замаскированное 401.
+func TestUserHandler_Refresh_InternalError(t *testing.T) {
+	svc := &mockUserService{
+		refreshFn: func(ctx context.Context, refreshToken string) (*auth.TokenPair, error) {
+			return nil, errBoom
+		},
+	}
+	h := userRouter(svc, domain.RoleUser)
+
+	rec := do(h, http.MethodPost, "/auth/refresh", `{"refresh_token":"x"}`)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
 
@@ -163,7 +178,23 @@ func TestUserHandler_Logout_Success(t *testing.T) {
 	}
 }
 
+// Битый refresh-токен при logout -> 401.
 func TestUserHandler_Logout_Invalid(t *testing.T) {
+	svc := &mockUserService{
+		logoutFn: func(ctx context.Context, refreshToken string) error {
+			return auth.ErrInvalidToken
+		},
+	}
+	h := userRouter(svc, domain.RoleUser)
+
+	rec := do(h, http.MethodPost, "/auth/logout", `{"refresh_token":"x"}`)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+// Внутренняя ошибка при logout -> 500, а не 401.
+func TestUserHandler_Logout_InternalError(t *testing.T) {
 	svc := &mockUserService{
 		logoutFn: func(ctx context.Context, refreshToken string) error {
 			return errBoom
@@ -172,8 +203,8 @@ func TestUserHandler_Logout_Invalid(t *testing.T) {
 	h := userRouter(svc, domain.RoleUser)
 
 	rec := do(h, http.MethodPost, "/auth/logout", `{"refresh_token":"x"}`)
-	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401", rec.Code)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
 	}
 }
 

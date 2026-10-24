@@ -126,9 +126,21 @@ func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain
 	return user, nil
 }
 
+// dummyPasswordHash — фиксированный bcrypt-хеш для логина с несуществующим
+// email: сравнение с ним выполняется и в этом случае, чтобы время ответа при
+// отсутствии аккаунта совпадало со временем при неверном пароле. Без этого
+// разница во времени позволяет перечислять зарегистрированные email.
+var dummyPasswordHash = []byte("$2a$10$DHJzEPTI5z2B72FyRUZtC.zC2J.mwpxC0JncVMtn5JeTqfdArgVuW")
+
 func (s *UserService) Login(ctx context.Context, email, password string) (*auth.TokenPair, error) {
 	user, err := s.repo.GetByEmail(ctx, strings.ToLower(email))
 	if err != nil {
+		if !errors.Is(err, domain.ErrNotFound) {
+			// Сбой БД — не «неверные учётные данные», а внутренняя ошибка.
+			return nil, fmt.Errorf("service.Login: %w", err)
+		}
+		// Аккаунта нет: всё равно прогоняем bcrypt, выравнивая время ответа.
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
 		return nil, domain.ErrInvalidCredentials
 	}
 

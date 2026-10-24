@@ -372,6 +372,22 @@ func TestUserService_Login_WrongPassword(t *testing.T) {
 	}
 }
 
+// Сбой БД при поиске пользователя — внутренняя ошибка, а не «неверные
+// учётные данные» (клиент не должен принимать падение БД за неверный пароль).
+func TestUserService_Login_RepoErrorWrapped(t *testing.T) {
+	repo := &mockUserRepo{
+		getByEmailFn: func(ctx context.Context, email string) (domain.User, error) {
+			return domain.User{}, errBoom
+		},
+	}
+	svc := newTestUserService(repo, nil, nil)
+
+	_, err := svc.Login(context.Background(), "alice@example.com", validPassword)
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("err = %v, want wrapped errBoom", err)
+	}
+}
+
 // --- Delete ---
 
 // Админ может удалить пользователя; после удаления отзываются все его сессии.
