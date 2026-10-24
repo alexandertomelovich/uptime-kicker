@@ -48,7 +48,7 @@ func formatSiteList(sites []domain.SiteResponse) string {
 }
 
 // formatSiteDetail формирует детальную карточку сайта.
-func formatSiteDetail(s domain.Site) string {
+func formatSiteDetail(s domain.SiteResponse) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s %s\n", statusEmoji(s.Status), s.Name)
 	fmt.Fprintf(&b, "URL: %s\n", s.Url)

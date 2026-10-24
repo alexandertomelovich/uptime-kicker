@@ -194,8 +194,8 @@ func TestCmdStatus_Success(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID, Name: "S", Url: "https://s", Status: domain.StatusUp, IsActive: true}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: "S", Url: "https://s", Status: domain.StatusUp, IsActive: true}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -229,8 +229,8 @@ func TestCmdStatus_InvalidID(t *testing.T) {
 
 func TestCmdStatus_NotFound(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrNotFound
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -242,11 +242,11 @@ func TestCmdStatus_NotFound(t *testing.T) {
 	}
 }
 
-// Сайт найден, но принадлежит другому пользователю.
+// Сайт чужой -> сервис возвращает ErrSiteNotBelongUser.
 func TestCmdStatus_NotOwned(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: uuid.New()}, nil // чужой UserID
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -264,8 +264,8 @@ func TestCmdRemove_ShowsConfirmation(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID, Name: "S", Url: "https://s"}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: "S", Url: "https://s"}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -296,8 +296,8 @@ func TestCmdVerify_Success(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID, Name: "S"}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: "S"}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -334,8 +334,8 @@ func TestCmdVerify_InvalidID(t *testing.T) {
 
 func TestCmdVerify_SiteNotFound(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrNotFound
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -347,11 +347,11 @@ func TestCmdVerify_SiteNotFound(t *testing.T) {
 	}
 }
 
-// Сайт чужой -> отказ до обращения к сервису.
+// Сайт чужой -> сервис (GetByID) возвращает ErrSiteNotBelongUser, до VerifySite не доходим.
 func TestCmdVerify_NotOwned(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: uuid.New()}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -367,8 +367,8 @@ func TestCmdVerify_ServiceError(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID}, nil
 		},
 		verifyFn: func(ctx context.Context, id, userID uuid.UUID, token string) error {
 			return domain.ErrInvalidToken

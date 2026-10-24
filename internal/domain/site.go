@@ -66,6 +66,7 @@ type SiteResponse struct {
 	VerifiedAt           *time.Time `json:"verified_at,omitempty"`
 	LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
 	LastStatusCode       *int32     `json:"last_status_code,omitempty"`
+	ResponseTimeMs       *int32     `json:"response_time_ms,omitempty"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 }
@@ -82,7 +83,9 @@ func (s Site) ToResponse() SiteResponse {
 		VerifiedAt:           s.VerifiedAt,
 		LastCheckedAt:        s.LastCheckedAt,
 		LastStatusCode:       s.LastStatusCode,
+		ResponseTimeMs:       s.ResponseTimeMs,
 		CreatedAt:            s.CreatedAt,
 		UpdatedAt:            s.UpdatedAt,
 	}
 }
+

@@ -46,19 +46,19 @@ func (h *Handler) HandleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return
 	}
 
-	// Загружаем сайт и проверяем владение.
-	site, err := h.sites.GetByID(ctx, id)
+	// Загружаем сайт. Владение проверяет сервис (GetByID -> ErrSiteNotBelongUser).
+	site, err := h.sites.GetByID(ctx, id, user.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			h.reply(chatID, "❌ Сайт не найден (возможно, уже удалён).", nil)
 			return
 		}
+		if errors.Is(err, domain.ErrSiteNotBelongUser) {
+			h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
+			return
+		}
 		log.Printf("telegram: callback GetByID: %v", err)
 		h.reply(chatID, "⚠️ Внутренняя ошибка.", nil)
-		return
-	}
-	if site.UserID != user.ID {
-		h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *Handler) HandleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 }
 
 // confirmRemove выполняет удаление сайта после подтверждения.
-func (h *Handler) confirmRemove(ctx context.Context, chatID int64, userID uuid.UUID, site domain.Site) {
+func (h *Handler) confirmRemove(ctx context.Context, chatID int64, userID uuid.UUID, site domain.SiteResponse) {
 	if err := h.sites.Delete(ctx, site.ID, userID); err != nil {
 		h.reply(chatID, "❌ Не удалось удалить: "+humanizeError(err), nil)
 		return
@@ -88,7 +88,7 @@ func (h *Handler) confirmRemove(ctx context.Context, chatID int64, userID uuid.U
 }
 
 // toggleSite переключает активность сайта (пауза/возобновление).
-func (h *Handler) toggleSite(ctx context.Context, chatID int64, userID uuid.UUID, site domain.Site) {
+func (h *Handler) toggleSite(ctx context.Context, chatID int64, userID uuid.UUID, site domain.SiteResponse) {
 	newActive := !site.IsActive
 
 	updated, err := h.sites.Update(ctx, domain.SiteUpdate{

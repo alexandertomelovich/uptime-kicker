@@ -105,9 +105,9 @@ type mockSiteService struct {
 	deleteFn      func(ctx context.Context, id, userID uuid.UUID) error
 	getAllSitesFn func(ctx context.Context, userID uuid.UUID) ([]domain.Site, error)
 	getByUserIDFn func(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
-	getByIDFn     func(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	getByIDFn     func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error)
 	getStatsFn    func(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
-	updateFn      func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
+	updateFn      func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
 
 	lastCreate service.CreateSiteRequest
 	lastUpdate domain.SiteUpdate
@@ -144,11 +144,11 @@ func (m *mockSiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]
 	}
 	return nil, nil
 }
-func (m *mockSiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+func (m *mockSiteService) GetByID(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 	if m.getByIDFn != nil {
-		return m.getByIDFn(ctx, id)
+		return m.getByIDFn(ctx, id, userID)
 	}
-	return domain.Site{ID: id}, nil
+	return domain.SiteResponse{ID: id}, nil
 }
 func (m *mockSiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
 	if m.getStatsFn != nil {
@@ -156,12 +156,12 @@ func (m *mockSiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (d
 	}
 	return domain.SiteStats{}, nil
 }
-func (m *mockSiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+func (m *mockSiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
 	m.lastUpdate = update
 	if m.updateFn != nil {
 		return m.updateFn(ctx, update)
 	}
-	return domain.Site{ID: update.ID}, nil
+	return domain.SiteResponse{ID: update.ID}, nil
 }
 
 // --- Хелперы для сборки роутера и запросов ---

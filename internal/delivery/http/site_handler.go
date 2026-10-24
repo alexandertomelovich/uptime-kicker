@@ -19,9 +19,9 @@ type SiteService interface {
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 	GetAllSites(ctx context.Context, userID uuid.UUID) ([]domain.Site, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
-	GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	GetByID(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error)
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
-	Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
+	Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
 }
 
 // SiteHandler обслуживает HTTP-запросы, связанные с сайтами.
@@ -163,14 +163,21 @@ func (h *SiteHandler) GetByUserID(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetByID возвращает сайт по id. GET /sites/{id}
+// Доступен владельцу сайта и администратору; для остальных — 403.
+// Ответ не содержит verification-токена (это SiteResponse).
 func (h *SiteHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserID(w, r)
+	if !ok {
+		return
+	}
+
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid site id")
 		return
 	}
 
-	site, err := h.svc.GetByID(r.Context(), id)
+	site, err := h.svc.GetByID(r.Context(), id, userID)
 	if err != nil {
 		status, msg := mapServiceError(err)
 		respondError(w, status, msg)
