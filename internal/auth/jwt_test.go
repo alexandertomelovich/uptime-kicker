@@ -29,7 +29,7 @@ type mockTokenStore struct {
 	sessions map[uuid.UUID]uuid.UUID // jti -> userID
 
 	saveErr      error
-	existsErr    error
+	takeErr      error
 	deleteErr    error
 	deleteAllErr error
 
@@ -50,14 +50,20 @@ func (m *mockTokenStore) Save(ctx context.Context, jti, userID uuid.UUID, expire
 	return nil
 }
 
-func (m *mockTokenStore) Exists(ctx context.Context, jti uuid.UUID) (bool, error) {
-	if m.existsErr != nil {
-		return false, m.existsErr
+// Take имитирует атомарное DELETE ... RETURNING: первый вызов удаляет сессию
+// и возвращает пользователя, повторный — ErrTokenRevoked.
+func (m *mockTokenStore) Take(ctx context.Context, jti uuid.UUID) (uuid.UUID, error) {
+	if m.takeErr != nil {
+		return uuid.Nil, m.takeErr
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, ok := m.sessions[jti]
-	return ok, nil
+	userID, ok := m.sessions[jti]
+	if !ok {
+		return uuid.Nil, ErrTokenRevoked
+	}
+	delete(m.sessions, jti)
+	return userID, nil
 }
 
 func (m *mockTokenStore) Delete(ctx context.Context, jti uuid.UUID) error {
@@ -409,6 +415,30 @@ func TestRefreshAccessToken_Revoked(t *testing.T) {
 	}
 }
 
+// Сессия с jti обязана принадлежать тому же пользователю, что и токен.
+// Подменить jti на практике нельзя (он неугадываем), но проверка бесплатна.
+func TestRefreshAccessToken_SessionUserMismatch(t *testing.T) {
+	store := newMockTokenStore()
+	// Подкладываем сессию с чужим userID: сначала создаём нормальную пару,
+	// затем «перепривязываем» её jti к другому пользователю напрямую в моке.
+	m := newTestManager(WithTokenStore(store))
+	pair, err := m.GenerateTokenPair(context.Background(), testUserID, "a@example.com", domain.RoleUser, 0)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	var jti uuid.UUID
+	for j := range store.sessions {
+		jti = j
+	}
+	store.mu.Lock()
+	store.sessions[jti] = uuid.New()
+	store.mu.Unlock()
+
+	if _, err := m.RefreshAccessToken(context.Background(), pair.RefreshToken); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("err = %v, want ErrInvalidToken", err)
+	}
+}
+
 // Удалённый пользователь (provider вернул ErrNotFound) не получает новую пару.
 func TestRefreshAccessToken_UserDeleted(t *testing.T) {
 	store := newMockTokenStore()
@@ -438,9 +468,9 @@ func TestRefreshAccessToken_InvalidToken(t *testing.T) {
 func TestRefreshAccessToken_StoreErrors(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("exists error", func(t *testing.T) {
+	t.Run("take error", func(t *testing.T) {
 		store := newMockTokenStore()
-		store.existsErr = errors.New("boom")
+		store.takeErr = errors.New("boom")
 		m := newTestManager(WithTokenStore(store))
 		pair, _ := m.GenerateTokenPair(ctx, testUserID, "a@example.com", domain.RoleUser, 0)
 
@@ -449,11 +479,11 @@ func TestRefreshAccessToken_StoreErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("delete error", func(t *testing.T) {
+	t.Run("save error", func(t *testing.T) {
 		store := newMockTokenStore()
 		m := newTestManager(WithTokenStore(store))
 		pair, _ := m.GenerateTokenPair(ctx, testUserID, "a@example.com", domain.RoleUser, 0)
-		store.deleteErr = errors.New("boom")
+		store.saveErr = errors.New("boom")
 
 		if _, err := m.RefreshAccessToken(ctx, pair.RefreshToken); err == nil {
 			t.Fatal("ожидалась ошибка")

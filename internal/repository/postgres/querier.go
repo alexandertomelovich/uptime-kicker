@@ -28,13 +28,17 @@ type Querier interface {
 	GetByID(ctx context.Context, id uuid.UUID) (GetByIDRow, error)
 	GetByTelegramID(ctx context.Context, telegramID int64) (GetByTelegramIDRow, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]Site, error)
-	GetRefreshToken(ctx context.Context, jti uuid.UUID) (RefreshToken, error)
 	GetSiteByID(ctx context.Context, id uuid.UUID) (Site, error)
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (GetSiteStatsRow, error)
 	GetSiteWithOwner(ctx context.Context, id uuid.UUID) (GetSiteWithOwnerRow, error)
 	GetSitesNeedingCheck(ctx context.Context, limit int32) ([]Site, error)
 	GetUsersByName(ctx context.Context, name string) ([]GetUsersByNameRow, error)
 	InsertCheckLog(ctx context.Context, arg InsertCheckLogParams) error
+	// Атомарное изъятие refresh-сессии: один DELETE сразу удаляет строку и
+	// возвращает её user_id. Второй параллельный запрос с тем же токеном строку
+	// уже не найдёт — так закрывается гонка Exists-then-Delete, при которой
+	// один refresh-токен можно было дважды обменять на две новые пары.
+	TakeRefreshToken(ctx context.Context, jti uuid.UUID) (uuid.UUID, error)
 	UpdateSite(ctx context.Context, arg UpdateSiteParams) (Site, error)
 	UpdateSiteStatus(ctx context.Context, arg UpdateSiteStatusParams) (Site, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (uuid.UUID, error)

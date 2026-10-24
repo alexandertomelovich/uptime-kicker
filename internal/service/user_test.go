@@ -66,8 +66,8 @@ func (m *mockTokenStore) Save(ctx context.Context, jti, userID uuid.UUID, expire
 	return nil
 }
 
-func (m *mockTokenStore) Exists(ctx context.Context, jti uuid.UUID) (bool, error) {
-	return true, nil
+func (m *mockTokenStore) Take(ctx context.Context, jti uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, auth.ErrTokenRevoked
 }
 
 func (m *mockTokenStore) Delete(ctx context.Context, jti uuid.UUID) error { return nil }

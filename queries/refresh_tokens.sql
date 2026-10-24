@@ -7,13 +7,14 @@ INSERT INTO refresh_tokens (
     $1, $2, $3
 );
 
--- name: GetRefreshToken :one
-SELECT jti,
-    user_id,
-    expires_at,
-    created_at
-FROM refresh_tokens
-WHERE jti = $1;
+-- name: TakeRefreshToken :one
+-- Атомарное изъятие refresh-сессии: один DELETE сразу удаляет строку и
+-- возвращает её user_id. Второй параллельный запрос с тем же токеном строку
+-- уже не найдёт — так закрывается гонка Exists-then-Delete, при которой
+-- один refresh-токен можно было дважды обменять на две новые пары.
+DELETE FROM refresh_tokens
+WHERE jti = $1
+RETURNING user_id;
 
 -- name: DeleteRefreshToken :exec
 DELETE FROM refresh_tokens

@@ -63,23 +63,19 @@ func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID uuid.UUID)
 	return err
 }
 
-const getRefreshToken = `-- name: GetRefreshToken :one
-SELECT jti,
-    user_id,
-    expires_at,
-    created_at
-FROM refresh_tokens
+const takeRefreshToken = `-- name: TakeRefreshToken :one
+DELETE FROM refresh_tokens
 WHERE jti = $1
+RETURNING user_id
 `
 
-func (q *Queries) GetRefreshToken(ctx context.Context, jti uuid.UUID) (RefreshToken, error) {
-	row := q.db.QueryRow(ctx, getRefreshToken, jti)
-	var i RefreshToken
-	err := row.Scan(
-		&i.Jti,
-		&i.UserID,
-		&i.ExpiresAt,
-		&i.CreatedAt,
-	)
-	return i, err
+// Атомарное изъятие refresh-сессии: один DELETE сразу удаляет строку и
+// возвращает её user_id. Второй параллельный запрос с тем же токеном строку
+// уже не найдёт — так закрывается гонка Exists-then-Delete, при которой
+// один refresh-токен можно было дважды обменять на две новые пары.
+func (q *Queries) TakeRefreshToken(ctx context.Context, jti uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, takeRefreshToken, jti)
+	var user_id uuid.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }

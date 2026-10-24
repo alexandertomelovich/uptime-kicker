@@ -174,14 +174,21 @@ func (m *JWTManager) RefreshAccessToken(ctx context.Context, refreshToken string
 		return nil, fmt.Errorf("malformed token id: %w", ErrInvalidToken)
 	}
 
-	// Проверяем, что сессия ещё активна (не отозвана).
+	// Атомарно изымаем сессию: единственный DELETE гарантирует, что при
+	// двух параллельных refresh с одним токеном новую пару получит только
+	// первый — второй увидит уже удалённую сессию (ErrTokenRevoked).
 	if m.tokenStore != nil {
-		exists, err := m.tokenStore.Exists(ctx, jti)
+		sessionUserID, err := m.tokenStore.Take(ctx, jti)
 		if err != nil {
-			return nil, fmt.Errorf("failed to check refresh session: %w", err)
+			if errors.Is(err, ErrTokenRevoked) {
+				return nil, ErrTokenRevoked
+			}
+			return nil, fmt.Errorf("failed to revoke refresh session: %w", err)
 		}
-		if !exists {
-			return nil, ErrTokenRevoked
+		// Сессия по jti обязана принадлежать тому же пользователю, что и
+		// сам токен (jti уникален и неугадываем, но проверка бесплатна).
+		if sessionUserID != claims.UserID {
+			return nil, fmt.Errorf("refresh session user mismatch: %w", ErrInvalidToken)
 		}
 	}
 
@@ -192,13 +199,6 @@ func (m *JWTManager) RefreshAccessToken(ctx context.Context, refreshToken string
 		email, role, telegramID, err = m.userProvider.GetAuthData(ctx, claims.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load user data: %w", err)
-		}
-	}
-
-	// Ротация: старую сессию удаляем ДО выдачи новой пары.
-	if m.tokenStore != nil {
-		if err := m.tokenStore.Delete(ctx, jti); err != nil {
-			return nil, fmt.Errorf("failed to revoke refresh session: %w", err)
 		}
 	}
 
