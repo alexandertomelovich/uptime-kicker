@@ -13,14 +13,14 @@ import (
 
 const aggregateDailyStats = `-- name: AggregateDailyStats :exec
 INSERT INTO check_daily_stats (
-    site_id, date, 
-    total_checks, 
-    failed_checks, 
-    avg_latency_ms, 
-    max_latency_ms, 
+    site_id, date,
+    total_checks,
+    failed_checks,
+    avg_latency_ms,
+    max_latency_ms,
     uptime_percentage
     )
-SELECT 
+SELECT
     site_id,
     DATE(checked_at) as log_date,
     COUNT(*) as total_checks,
@@ -29,11 +29,16 @@ SELECT
     MAX(latency_ms) as max_latency,
     ROUND(((COUNT(*) - COUNT(*) FILTER (WHERE status_code < 200 OR status_code >= 300))::NUMERIC / COUNT(*)) * 100, 2) as uptime
 FROM check_logs_raw
-WHERE checked_at >= CURRENT_DATE - INTERVAL '1 day' AND checked_at < CURRENT_DATE
+WHERE checked_at < CURRENT_DATE
 GROUP BY site_id, log_date
 ON CONFLICT (site_id, date) DO NOTHING
 `
 
+// Агрегируем ВСЮ историю до текущего дня, а не только вчерашний день:
+// ON CONFLICT DO NOTHING делает повторные прогоны идемпотентными, поэтому
+// пропущенный по какой-то причине запуск (даунтайм) добирает упущенные дни
+// при следующем cron-е. Это же позволяет ClearLogs безопасно удалять сырые
+// логи сразу после агрегации.
 func (q *Queries) AggregateDailyStats(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, aggregateDailyStats)
 	return err

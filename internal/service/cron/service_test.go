@@ -1,7 +1,8 @@
-// Тесты для cron-сервиса агрегации дневной статистики (service.go).
-// Репозиторий подменяется простым моком (интерфейс из одного метода), сам
-// планировщик тестируется косвенно через ExecuteDailyCheck и через проверку
-// жизненного цикла StartCron/StopCron.
+// Тесты для cron-сервиса ежедневного обслуживания (service.go):
+// агрегация дневной статистики + очистка устаревших логов и истёкших
+// refresh-сессий. Репозитории подменяются простыми моками, сам планировщик
+// тестируется косвенно через ExecuteDailyCheck и через проверку жизненного
+// цикла StartCron/StopCron.
 package cron
 
 import (
@@ -14,59 +15,122 @@ import (
 
 // mockCheckRepo реализует CheckRepository, запоминая вызовы и умея имитировать
 // ошибку (в т.ч. панику) — это нужно, чтобы проверить защиту ExecuteDailyCheck.
-// Счётчик защищён мьютексом: задачи могут выполняться из горутины планировщика.
+// Счётчики защищены мьютексом: задачи могут выполняться из горутины планировщика.
 type mockCheckRepo struct {
 	mu         sync.Mutex
-	calls      int
-	err        error
-	panicValue any
+	aggCalls   int
+	clearCalls int
+
+	aggErr      error
+	clearErr    error
+	panicValue  any
+	clearShouldPanic bool
 }
 
 func (m *mockCheckRepo) AggregateDailyStats(ctx context.Context) error {
 	m.mu.Lock()
-	m.calls++
+	m.aggCalls++
 	m.mu.Unlock()
 	if m.panicValue != nil {
 		panic(m.panicValue)
 	}
+	return m.aggErr
+}
+
+func (m *mockCheckRepo) ClearLogs(ctx context.Context) error {
+	m.mu.Lock()
+	m.clearCalls++
+	m.mu.Unlock()
+	if m.clearShouldPanic {
+		panic("clear boom")
+	}
+	return m.clearErr
+}
+
+func (m *mockCheckRepo) counts() (agg, clear int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.aggCalls, m.clearCalls
+}
+
+// mockTokenCleaner реализует TokenCleaner.
+type mockTokenCleaner struct {
+	mu    sync.Mutex
+	calls int
+	err   error
+}
+
+func (m *mockTokenCleaner) DeleteExpired(ctx context.Context) error {
+	m.mu.Lock()
+	m.calls++
+	m.mu.Unlock()
 	return m.err
 }
 
-func (m *mockCheckRepo) callCount() int {
+func (m *mockTokenCleaner) callCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.calls
 }
 
-// Успешный запуск: репозиторий вызывается ровно один раз, ошибки нет.
+// Успешный запуск: агрегация, очистка логов и очистка токенов — по одному разу.
 func TestExecuteDailyCheck_Success(t *testing.T) {
 	repo := &mockCheckRepo{}
-	svc := NewDailyStatsService(repo)
+	tokens := &mockTokenCleaner{}
+	svc := NewMaintenanceService(repo, tokens)
 
 	svc.ExecuteDailyCheck()
 
-	if got := repo.callCount(); got != 1 {
-		t.Errorf("AggregateDailyStats вызван %d раз, want 1", got)
+	agg, clear := repo.counts()
+	if agg != 1 {
+		t.Errorf("AggregateDailyStats вызван %d раз, want 1", agg)
+	}
+	if clear != 1 {
+		t.Errorf("ClearLogs вызван %d раз, want 1", clear)
+	}
+	if tokens.callCount() != 1 {
+		t.Errorf("DeleteExpired вызван %d раз, want 1", tokens.callCount())
 	}
 }
 
-// Ошибка репозитория не должна ронять сервис (только логируется).
-func TestExecuteDailyCheck_RepoError(t *testing.T) {
-	repo := &mockCheckRepo{err: errors.New("db down")}
-	svc := NewDailyStatsService(repo)
+// Ошибка агрегации => очистка логов НЕ выполняется (нельзя удалять сырые
+// данные, не попавшие в дневную статистику), но refresh-токены чистятся —
+// это независимая таблица.
+func TestExecuteDailyCheck_AggErrorSkipsLogCleanup(t *testing.T) {
+	repo := &mockCheckRepo{aggErr: errors.New("db down")}
+	tokens := &mockTokenCleaner{}
+	svc := NewMaintenanceService(repo, tokens)
 
-	// Не должно паниковать.
+	svc.ExecuteDailyCheck() // не должен паниковать
+
+	agg, clear := repo.counts()
+	if agg != 1 {
+		t.Errorf("AggregateDailyStats вызван %d раз, want 1", agg)
+	}
+	if clear != 0 {
+		t.Errorf("ClearLogs вызван %d раз, want 0 (агрегация не прошла)", clear)
+	}
+	if tokens.callCount() != 1 {
+		t.Errorf("DeleteExpired вызван %d раз, want 1", tokens.callCount())
+	}
+}
+
+// Ошибка агрегации не должна ронять сервис (только логируется).
+func TestExecuteDailyCheck_RepoError(t *testing.T) {
+	repo := &mockCheckRepo{aggErr: errors.New("db down")}
+	svc := NewMaintenanceService(repo, &mockTokenCleaner{})
+
 	svc.ExecuteDailyCheck()
 
-	if got := repo.callCount(); got != 1 {
-		t.Errorf("AggregateDailyStats вызван %d раз, want 1", got)
+	if agg, _ := repo.counts(); agg != 1 {
+		t.Errorf("AggregateDailyStats вызван %d раз, want 1", agg)
 	}
 }
 
 // Паника внутри репозитория перехватывается recover — сервис не падает.
 func TestExecuteDailyCheck_RecoversPanic(t *testing.T) {
 	repo := &mockCheckRepo{panicValue: "boom"}
-	svc := NewDailyStatsService(repo)
+	svc := NewMaintenanceService(repo, &mockTokenCleaner{})
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -77,9 +141,21 @@ func TestExecuteDailyCheck_RecoversPanic(t *testing.T) {
 	svc.ExecuteDailyCheck()
 }
 
+// nil-очиститель токенов допустим — эта часть обслуживания просто пропускается.
+func TestExecuteDailyCheck_NilTokenCleaner(t *testing.T) {
+	repo := &mockCheckRepo{}
+	svc := NewMaintenanceService(repo, nil)
+
+	svc.ExecuteDailyCheck()
+
+	if agg, clear := repo.counts(); agg != 1 || clear != 1 {
+		t.Errorf("agg=%d clear=%d, want 1/1", agg, clear)
+	}
+}
+
 // Повторный StartCron является ошибкой (планировщик уже запущен).
 func TestStartCron_TwiceReturnsError(t *testing.T) {
-	svc := NewDailyStatsService(&mockCheckRepo{})
+	svc := NewMaintenanceService(&mockCheckRepo{}, &mockTokenCleaner{})
 
 	if err := svc.StartCron(); err != nil {
 		t.Fatalf("первый StartCron: %v", err)
@@ -93,7 +169,7 @@ func TestStartCron_TwiceReturnsError(t *testing.T) {
 
 // StopCron завершается при отменённом контексте (не блокируется).
 func TestStopCron_CancelledContext(t *testing.T) {
-	svc := NewDailyStatsService(&mockCheckRepo{})
+	svc := NewMaintenanceService(&mockCheckRepo{}, &mockTokenCleaner{})
 	if err := svc.StartCron(); err != nil {
 		t.Fatalf("StartCron: %v", err)
 	}
@@ -107,7 +183,7 @@ func TestStopCron_CancelledContext(t *testing.T) {
 // StopCron с неотменённым контекстом должен дождаться graceful-остановки
 // планировщика и вернуться задолго до истечения контекста.
 func TestStopCron_GracefulWithLiveContext(t *testing.T) {
-	svc := NewDailyStatsService(&mockCheckRepo{})
+	svc := NewMaintenanceService(&mockCheckRepo{}, &mockTokenCleaner{})
 	if err := svc.StartCron(); err != nil {
 		t.Fatalf("StartCron: %v", err)
 	}
@@ -132,7 +208,7 @@ func TestStopCron_GracefulWithLiveContext(t *testing.T) {
 // StartCron регистрирует ровно одну запись в планировщике с ожидаемым
 // расписанием, а StopCron корректно останавливает его.
 func TestStartCron_RegistersEntry(t *testing.T) {
-	svc := NewDailyStatsService(&mockCheckRepo{})
+	svc := NewMaintenanceService(&mockCheckRepo{}, &mockTokenCleaner{})
 
 	if err := svc.StartCron(); err != nil {
 		t.Fatalf("StartCron: %v", err)

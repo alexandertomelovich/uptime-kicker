@@ -62,3 +62,12 @@ func (r *RefreshTokenRepository) DeleteAllForUser(ctx context.Context, userID uu
 	}
 	return nil
 }
+
+// DeleteExpired удаляет истёкшие refresh-сессии. Вызывается ежедневным
+// cron-ом — иначе таблица refresh_tokens растёт бесконечно.
+func (r *RefreshTokenRepository) DeleteExpired(ctx context.Context) error {
+	if err := r.queries.DeleteExpiredRefreshTokens(ctx); err != nil {
+		return fmt.Errorf("repository.DeleteExpiredRefreshTokens: %w", err)
+	}
+	return nil
+}

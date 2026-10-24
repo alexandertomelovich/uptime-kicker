@@ -11,6 +11,11 @@ import (
 )
 
 type Querier interface {
+	// Агрегируем ВСЮ историю до текущего дня, а не только вчерашний день:
+	// ON CONFLICT DO NOTHING делает повторные прогоны идемпотентными, поэтому
+	// пропущенный по какой-то причине запуск (даунтайм) добирает упущенные дни
+	// при следующем cron-е. Это же позволяет ClearLogs безопасно удалять сырые
+	// логи сразу после агрегации.
 	AggregateDailyStats(ctx context.Context) error
 	ClearLogs(ctx context.Context) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error

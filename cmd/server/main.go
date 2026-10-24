@@ -74,8 +74,8 @@ func run() error {
 	)
 	checker.Start()
 
-	dailyStats := cronsvc.NewDailyStatsService(checkRepo)
-	if err := dailyStats.StartCron(); err != nil {
+	maintenance := cronsvc.NewMaintenanceService(checkRepo, refreshTokenRepo)
+	if err := maintenance.StartCron(); err != nil {
 		return err
 	}
 
@@ -148,7 +148,7 @@ func run() error {
 	}
 
 	checker.Stop()
-	dailyStats.StopCron(shutdownCtx)
+	maintenance.StopCron(shutdownCtx)
 
 	log.Println("shutdown complete")
 	return nil
