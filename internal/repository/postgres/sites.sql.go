@@ -267,7 +267,10 @@ SELECT
     COUNT(CASE WHEN status = 'up' THEN 1 END) as up_sites,
     COUNT(CASE WHEN status = 'down' THEN 1 END) as down_sites,
     COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_sites,
-    AVG(response_time_ms) as avg_response_time
+    -- COALESCE обязателен: без сайтов (или без проверок) AVG даёт NULL,
+    -- который pgx не может отсканировать в не-указатель float64.
+    -- ::FLOAT8 фиксирует тип, иначе sqlc выводит interface{}.
+    COALESCE(AVG(response_time_ms), 0)::FLOAT8 as avg_response_time
 FROM sites
 WHERE user_id = $1
 `
