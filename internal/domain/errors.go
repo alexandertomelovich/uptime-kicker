@@ -9,6 +9,7 @@ var (
 
 	ErrEmailAlreadyExists    = errors.New("user with this email already exists")
 	ErrTelegramAlreadyExists = errors.New("user with this telegram id already exists")
+	ErrInvalidTelegramID     = errors.New("telegram id must be a positive number")
 	ErrInvalidCredentials    = errors.New("invalid credentials")
 	ErrAdminRoleForbidden    = errors.New("cannot create a user with administrator rights")
 	ErrRoleChangeForbidden   = errors.New("only administrator can change user role")

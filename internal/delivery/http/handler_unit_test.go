@@ -29,6 +29,7 @@ func TestMapServiceError(t *testing.T) {
 		{"site not belong user", domain.ErrSiteNotBelongUser, http.StatusForbidden},
 		{"email exists", domain.ErrEmailAlreadyExists, http.StatusBadRequest},
 		{"telegram exists", domain.ErrTelegramAlreadyExists, http.StatusBadRequest},
+		{"invalid telegram id", domain.ErrInvalidTelegramID, http.StatusBadRequest},
 		{"password policy", domain.ErrPasswordPolicy, http.StatusBadRequest},
 		{"invalid role", domain.ErrInvalidRole, http.StatusBadRequest},
 		{"site not active", domain.ErrSiteNotActive, http.StatusBadRequest},

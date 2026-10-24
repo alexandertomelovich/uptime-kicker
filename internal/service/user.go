@@ -78,6 +78,13 @@ var DefaultPolicy = PasswordPolicy{
 }
 
 func (s *UserService) Register(ctx context.Context, req RegisterRequest) (domain.User, error) {
+	// telegram_id обязан быть настоящим id Telegram-аккаунта: на него уходят
+	// уведомления, а 0 как уникальное значение сделал бы второго
+	// пользователя без Telegram невозможным.
+	if req.TelegramID <= 0 {
+		return domain.User{}, domain.ErrInvalidTelegramID
+	}
+
 	_, err := s.repo.GetByEmail(ctx, strings.ToLower(req.Email))
 	if err == nil {
 		return domain.User{}, domain.ErrEmailAlreadyExists

@@ -55,6 +55,7 @@ func mapServiceError(err error) (int, string) {
 		return http.StatusForbidden, err.Error()
 	case errors.Is(err, domain.ErrEmailAlreadyExists),
 		errors.Is(err, domain.ErrTelegramAlreadyExists),
+		errors.Is(err, domain.ErrInvalidTelegramID),
 		errors.Is(err, domain.ErrPasswordPolicy),
 		errors.Is(err, domain.ErrInvalidRole),
 		errors.Is(err, domain.ErrSiteNotActive),

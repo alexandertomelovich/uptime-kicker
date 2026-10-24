@@ -17,11 +17,12 @@ type CheckDailyStat struct {
 	UptimePercentage float64    `json:"uptime_percentage"`
 }
 
+// CheckLogsRaw — запись журнала проверок. Момент проверки проставляется БД
+// (NOW() в InsertCheckLog), поэтому отдельного поля времени здесь нет.
 type CheckLogsRaw struct {
 	ID           int64     `json:"id"`
 	SiteID       uuid.UUID `json:"site_id"`
 	StatusCode   int       `json:"status_code"`
 	LatencyMs    int       `json:"latency_ms"`
 	ErrorMessage string    `json:"error_message"`
-	CheckedAt    time.Time `json:"checked_at"`
 }

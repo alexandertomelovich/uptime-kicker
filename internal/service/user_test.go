@@ -388,6 +388,20 @@ func TestUserService_Login_RepoErrorWrapped(t *testing.T) {
 	}
 }
 
+// telegram_id <= 0 отклоняется: на него уходят уведомления, а 0 как
+// уникальное значение делало бы второго пользователя без Telegram
+// невозможным.
+func TestUserService_Register_InvalidTelegramID(t *testing.T) {
+	svc := newTestUserService(&mockUserRepo{}, nil, nil)
+
+	_, err := svc.Register(context.Background(), RegisterRequest{
+		Email: "x@example.com", TelegramID: 0, Password: validPassword,
+	})
+	if !errors.Is(err, domain.ErrInvalidTelegramID) {
+		t.Fatalf("err = %v, want ErrInvalidTelegramID", err)
+	}
+}
+
 // --- Delete ---
 
 // Админ может удалить пользователя; после удаления отзываются все его сессии.
