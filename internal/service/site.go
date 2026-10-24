@@ -160,15 +160,42 @@ func (s *SiteService) GetByUserID(ctx context.Context, userID uuid.UUID) ([]doma
 	return responses, nil
 }
 
-func (s *SiteService) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+// GetByID возвращает сайт по id в виде безопасного SiteResponse (без
+// verification-токена). Доступ разрешён только владельцу сайта или администратору:
+// для остальных пользователей возвращается ErrSiteNotBelongUser.
+func (s *SiteService) GetByID(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 	site, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return domain.Site{}, domain.ErrNotFound
+			return domain.SiteResponse{}, domain.ErrNotFound
 		}
-		return domain.Site{}, fmt.Errorf("service.GetByID: %w", err)
+		return domain.SiteResponse{}, fmt.Errorf("service.GetByID: %w", err)
 	}
-	return site, nil
+
+	if site.UserID != userID {
+		if err := s.requireAdmin(ctx, userID); err != nil {
+			return domain.SiteResponse{}, err
+		}
+	}
+
+	return site.ToResponse(), nil
+}
+
+// requireAdmin проверяет, что пользователь userID существует и является
+// администратором. Возвращает ErrNotFound, если пользователя нет, и
+// ErrSiteNotBelongUser, если он не администратор (чтобы не раскрывать роль).
+func (s *SiteService) requireAdmin(ctx context.Context, userID uuid.UUID) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("service.requireAdmin: %w", err)
+	}
+	if !user.Role.IsAdmin() {
+		return domain.ErrSiteNotBelongUser
+	}
+	return nil
 }
 
 func (s *SiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
@@ -179,25 +206,27 @@ func (s *SiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domai
 	return stats, nil
 }
 
-func (s *SiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+// Update частично обновляет сайт и возвращает безопасный SiteResponse (без
+// verification-токена). Изменять можно только свой сайт.
+func (s *SiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
 	site, err := s.repo.GetByID(ctx, update.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return domain.Site{}, domain.ErrNotFound
+			return domain.SiteResponse{}, domain.ErrNotFound
 		}
-		return domain.Site{}, fmt.Errorf("service.Update: %w", err)
+		return domain.SiteResponse{}, fmt.Errorf("service.Update: %w", err)
 	}
 
 	if site.UserID != update.UserID {
-		return domain.Site{}, domain.ErrSiteNotBelongUser
+		return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
 	}
 
 	updated, err := s.repo.Update(ctx, update)
 	if err != nil {
-		return domain.Site{}, fmt.Errorf("service.Update: %w", err)
+		return domain.SiteResponse{}, fmt.Errorf("service.Update: %w", err)
 	}
 
-	return updated, nil
+	return updated.ToResponse(), nil
 }
 
 func (s *SiteService) GetSitesNeedingCheck(ctx context.Context, limit int) ([]domain.Site, error) {

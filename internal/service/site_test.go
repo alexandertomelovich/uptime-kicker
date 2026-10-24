@@ -736,21 +736,90 @@ func TestSiteService_GetByUserID_RepoError(t *testing.T) {
 
 // --- GetByID ---
 
-func TestSiteService_GetByID_Success(t *testing.T) {
+// Владелец получает свой сайт в виде SiteResponse (без verification-токена).
+func TestSiteService_GetByID_OwnerSuccess(t *testing.T) {
 	siteID := uuid.New()
+	userID := uuid.New()
 	repo := &mockSiteRepo{
 		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: siteID}, nil
+			return domain.Site{ID: siteID, UserID: userID, VerificationToken: "secret"}, nil
 		},
 	}
 	svc := newTestSiteService(repo, nil)
 
-	site, err := svc.GetByID(context.Background(), siteID)
+	site, err := svc.GetByID(context.Background(), siteID, userID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if site.ID != siteID {
 		t.Errorf("ID = %v, want %v", site.ID, siteID)
+	}
+}
+
+// Чужой сайт для обычного пользователя -> ErrSiteNotBelongUser (403 на HTTP-слое).
+func TestSiteService_GetByID_NotBelongUser(t *testing.T) {
+	siteID := uuid.New()
+	ownerID := uuid.New()
+	repo := &mockSiteRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: siteID, UserID: ownerID}, nil
+		},
+	}
+	userRepo := &mockUserRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.User, error) {
+			return domain.User{ID: id, Role: domain.RoleUser}, nil
+		},
+	}
+	svc := newTestSiteService(repo, userRepo)
+
+	_, err := svc.GetByID(context.Background(), siteID, uuid.New()) // не владелец
+	if !errors.Is(err, domain.ErrSiteNotBelongUser) {
+		t.Fatalf("err = %v, want ErrSiteNotBelongUser", err)
+	}
+}
+
+// Администратор может читать любой сайт.
+func TestSiteService_GetByID_AdminSuccess(t *testing.T) {
+	siteID := uuid.New()
+	ownerID := uuid.New()
+	repo := &mockSiteRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: siteID, UserID: ownerID}, nil
+		},
+	}
+	userRepo := &mockUserRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.User, error) {
+			return domain.User{ID: id, Role: domain.RoleAdmin}, nil
+		},
+	}
+	svc := newTestSiteService(repo, userRepo)
+
+	site, err := svc.GetByID(context.Background(), siteID, uuid.New()) // админ
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if site.ID != siteID {
+		t.Errorf("ID = %v, want %v", site.ID, siteID)
+	}
+}
+
+// Если пользователя нет в БД при проверке админа -> ErrNotFound.
+func TestSiteService_GetByID_CallerNotFound(t *testing.T) {
+	repo := &mockSiteRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: id, UserID: uuid.New()}, nil
+		},
+	}
+	userRepo := &mockUserRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.User, error) {
+			return domain.User{}, domain.ErrNotFound
+		},
+	}
+	svc := newTestSiteService(repo, userRepo)
+
+	_, err := svc.GetByID(context.Background(), uuid.New(), uuid.New())
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -762,7 +831,7 @@ func TestSiteService_GetByID_NotFound(t *testing.T) {
 	}
 	svc := newTestSiteService(repo, nil)
 
-	_, err := svc.GetByID(context.Background(), uuid.New())
+	_, err := svc.GetByID(context.Background(), uuid.New(), uuid.New())
 	if !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
@@ -776,7 +845,7 @@ func TestSiteService_GetByID_ErrorWrapped(t *testing.T) {
 	}
 	svc := newTestSiteService(repo, nil)
 
-	_, err := svc.GetByID(context.Background(), uuid.New())
+	_, err := svc.GetByID(context.Background(), uuid.New(), uuid.New())
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("err = %v, want wrapped errBoom", err)
 	}
@@ -895,6 +964,7 @@ func TestSiteService_GetSitesNeedingCheck_Error(t *testing.T) {
 
 // --- Update ---
 
+// Успешное обновление возвращает SiteResponse (без verification-токена).
 func TestSiteService_Update_Success(t *testing.T) {
 	userID := uuid.New()
 	siteID := uuid.New()
@@ -904,7 +974,7 @@ func TestSiteService_Update_Success(t *testing.T) {
 			return domain.Site{ID: siteID, UserID: userID}, nil
 		},
 		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
-			return domain.Site{ID: update.ID, Name: *update.Name}, nil
+			return domain.Site{ID: update.ID, Name: *update.Name, VerificationToken: "secret"}, nil
 		},
 	}
 	svc := newTestSiteService(repo, nil)

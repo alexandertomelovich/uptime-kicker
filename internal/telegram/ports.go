@@ -35,9 +35,11 @@ type UserProvider interface {
 type SiteService interface {
 	Create(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error)
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
-	GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	// GetByID проверяет владение сайтом внутри сервиса и возвращает безопасный
+	// SiteResponse (без verification-токена).
+	GetByID(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error)
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
-	Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
+	Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
 	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error
 }

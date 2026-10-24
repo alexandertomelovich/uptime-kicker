@@ -105,7 +105,7 @@ func TestFormatSiteList_WithSites(t *testing.T) {
 // опциональные строки отсутствуют.
 func TestFormatSiteDetail_Minimal(t *testing.T) {
 	id := uuid.New()
-	site := domain.Site{
+	site := domain.SiteResponse{
 		ID:                   id,
 		Url:                  "https://example.com",
 		Name:                 "Example",
@@ -139,7 +139,7 @@ func TestFormatSiteDetail_WithOptionalFields(t *testing.T) {
 	checked := time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC)
 	code := int32(503)
 	rt := int32(150)
-	site := domain.Site{
+	site := domain.SiteResponse{
 		ID:             uuid.New(),
 		Url:            "https://example.com",
 		Name:           "Example",
@@ -165,7 +165,7 @@ func TestFormatSiteDetail_WithOptionalFields(t *testing.T) {
 
 // Неактивный и неподтверждённый сайт -> предупреждение с подсказкой /verify.
 func TestFormatSiteDetail_NotVerifiedWarning(t *testing.T) {
-	site := domain.Site{
+	site := domain.SiteResponse{
 		ID:         uuid.New(),
 		Url:        "https://example.com",
 		Name:       "Example",
@@ -184,7 +184,7 @@ func TestFormatSiteDetail_NotVerifiedWarning(t *testing.T) {
 // Активный и подтверждённый сайт не получает предупреждение.
 func TestFormatSiteDetail_VerifiedNoWarning(t *testing.T) {
 	verified := time.Now()
-	site := domain.Site{
+	site := domain.SiteResponse{
 		ID:         uuid.New(),
 		Url:        "https://example.com",
 		Name:       "Example",

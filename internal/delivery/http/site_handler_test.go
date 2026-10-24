@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"health_checker/internal/domain"
@@ -215,11 +216,19 @@ func TestSiteHandler_GetByUserID_InternalError(t *testing.T) {
 
 // --- GetByID ---
 
+// Успешное чтение своего сайта: проверяем, что handler передаёт userID в сервис
+// и возвращает тело без verification-токена (SiteResponse).
 func TestSiteHandler_GetByID_Success(t *testing.T) {
 	id := uuid.New()
 	svc := &mockSiteService{
-		getByIDFn: func(ctx context.Context, got uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: got}, nil
+		getByIDFn: func(ctx context.Context, got, userID uuid.UUID) (domain.SiteResponse, error) {
+			if got != id {
+				t.Errorf("id = %v, want %v", got, id)
+			}
+			if userID != testUserID {
+				t.Errorf("userID = %v, want %v", userID, testUserID)
+			}
+			return domain.SiteResponse{ID: got, Name: "Mine"}, nil
 		},
 	}
 	h := siteRouter(svc, domain.RoleUser)
@@ -227,6 +236,33 @@ func TestSiteHandler_GetByID_Success(t *testing.T) {
 	rec := do(h, http.MethodGet, "/sites/"+id.String(), "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	var got domain.SiteResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("тело не JSON: %v", err)
+	}
+	if got.ID != id {
+		t.Errorf("ID = %v, want %v", got.ID, id)
+	}
+	// В ответе не должно быть verification-токена (его нет в SiteResponse).
+	if strings.Contains(rec.Body.String(), "verification_token") {
+		t.Errorf("ответ не должен содержать verification_token: %s", rec.Body.String())
+	}
+}
+
+// Чужой сайт -> сервис возвращает ErrSiteNotBelongUser -> 403 (IDOR закрыт).
+func TestSiteHandler_GetByID_Forbidden(t *testing.T) {
+	svc := &mockSiteService{
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
+		},
+	}
+	h := siteRouter(svc, domain.RoleUser)
+
+	rec := do(h, http.MethodGet, "/sites/"+uuid.New().String(), "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body=%s)", rec.Code, rec.Body.String())
 	}
 }
 
@@ -241,8 +277,8 @@ func TestSiteHandler_GetByID_InvalidID(t *testing.T) {
 
 func TestSiteHandler_GetByID_NotFound(t *testing.T) {
 	svc := &mockSiteService{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrNotFound
 		},
 	}
 	h := siteRouter(svc, domain.RoleUser)
@@ -298,11 +334,11 @@ func TestSiteHandler_Update_Success(t *testing.T) {
 	id := uuid.New()
 	name := "New"
 	svc := &mockSiteService{
-		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
 			if update.ID != id || update.UserID != testUserID {
 				t.Errorf("неверный update: %+v", update)
 			}
-			return domain.Site{ID: id, Name: name}, nil
+			return domain.SiteResponse{ID: id, Name: name}, nil
 		},
 	}
 	h := siteRouter(svc, domain.RoleUser)
@@ -327,8 +363,8 @@ func TestSiteHandler_Update_InvalidID(t *testing.T) {
 
 func TestSiteHandler_Update_NotBelongUser(t *testing.T) {
 	svc := &mockSiteService{
-		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
-			return domain.Site{}, domain.ErrSiteNotBelongUser
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
 		},
 	}
 	h := siteRouter(svc, domain.RoleUser)

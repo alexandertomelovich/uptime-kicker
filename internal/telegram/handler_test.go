@@ -107,10 +107,10 @@ func (m *mockUsers) GetByTelegramID(ctx context.Context, telegramID int64) (doma
 type mockSites struct {
 	createFn  func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error)
 	listFn    func(ctx context.Context, userID uuid.UUID) ([]domain.SiteResponse, error)
-	getByIDFn func(ctx context.Context, id uuid.UUID) (domain.Site, error)
+	getByIDFn func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error)
 	statsFn   func(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
 	deleteFn  func(ctx context.Context, id, userID uuid.UUID) error
-	updateFn  func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error)
+	updateFn  func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
 	verifyFn  func(ctx context.Context, id, userID uuid.UUID, token string) error
 
 	lastCreate service.CreateSiteRequest
@@ -137,11 +137,11 @@ func (m *mockSites) GetByUserID(ctx context.Context, userID uuid.UUID) ([]domain
 	return nil, nil
 }
 
-func (m *mockSites) GetByID(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+func (m *mockSites) GetByID(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 	if m.getByIDFn != nil {
-		return m.getByIDFn(ctx, id)
+		return m.getByIDFn(ctx, id, userID)
 	}
-	return domain.Site{ID: id}, nil
+	return domain.SiteResponse{ID: id}, nil
 }
 
 func (m *mockSites) GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error) {
@@ -159,12 +159,12 @@ func (m *mockSites) Delete(ctx context.Context, id, userID uuid.UUID) error {
 	return nil
 }
 
-func (m *mockSites) Update(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+func (m *mockSites) Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
 	m.lastUpdate = update
 	if m.updateFn != nil {
 		return m.updateFn(ctx, update)
 	}
-	return domain.Site{ID: update.ID}, nil
+	return domain.SiteResponse{ID: update.ID}, nil
 }
 
 func (m *mockSites) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {

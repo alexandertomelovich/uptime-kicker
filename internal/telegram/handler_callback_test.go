@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// ownedSite — сайт, принадлежащий пользователю registeredUser(testTelegramID).
-func ownedSite(id uuid.UUID, userID uuid.UUID, isActive bool) domain.Site {
-	return domain.Site{ID: id, UserID: userID, Name: "Site", Url: "https://s", IsActive: isActive}
+// ownedSite — безопасный SiteResponse, принадлежащий указанному пользователю.
+func ownedSite(id uuid.UUID, userID uuid.UUID, isActive bool) domain.SiteResponse {
+	return domain.SiteResponse{ID: id, UserID: userID, Name: "Site", Url: "https://s", IsActive: isActive}
 }
 
 // nil callback и callback без From игнорируются.
@@ -69,8 +69,8 @@ func TestHandleCallback_InvalidSiteID(t *testing.T) {
 // Сайт не найден -> соответствующее сообщение.
 func TestHandleCallback_SiteNotFound(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{}, domain.ErrNotFound
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrNotFound
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -82,11 +82,11 @@ func TestHandleCallback_SiteNotFound(t *testing.T) {
 	}
 }
 
-// Чужой сайт -> отказ.
+// Чужой сайт -> отказ. Владение проверяет сервис (возвращает ErrSiteNotBelongUser).
 func TestHandleCallback_NotOwned(t *testing.T) {
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return ownedSite(id, uuid.New(), true), nil // чужой владелец
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -103,12 +103,12 @@ func TestHandleCallback_Toggle(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
-		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
 			// toggle инвертирует IsActive: true -> false (пауза).
-			return domain.Site{ID: update.ID, IsActive: *update.IsActive, Name: "Site"}, nil
+			return domain.SiteResponse{ID: update.ID, IsActive: *update.IsActive, Name: "Site"}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -128,7 +128,7 @@ func TestHandleCallback_Confirm(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
 	}
@@ -149,7 +149,7 @@ func TestHandleCallback_ConfirmDeleteError(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
 		deleteFn: func(ctx context.Context, id, userID uuid.UUID) error {
@@ -170,7 +170,7 @@ func TestHandleCallback_Remove(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
 	}
@@ -188,7 +188,7 @@ func TestHandleCallback_Status(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
 	}
@@ -206,7 +206,7 @@ func TestHandleCallback_UnknownAction(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
 	}
@@ -227,11 +227,11 @@ func TestHandleCallback_ToggleError(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
-		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
-			return domain.Site{}, errors.New("boom")
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
+			return domain.SiteResponse{}, errors.New("boom")
 		},
 	}
 	h, api := newTestHandler(user, sites)

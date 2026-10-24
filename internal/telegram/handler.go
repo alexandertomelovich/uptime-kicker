@@ -193,20 +193,20 @@ func (h *Handler) cmdVerify(ctx context.Context, chatID int64, userID uuid.UUID,
 		return
 	}
 
-	// Загружаем сайт, чтобы дать понятную обратную связь и проверить владение
-	// до обращения к сервису (сервис тоже проверяет принадлежность).
-	site, err := h.sites.GetByID(ctx, id)
+	// Загружаем сайт, чтобы дать понятную обратную связь. Владение проверяет
+	// сам сервис (GetByID возвращает ErrSiteNotBelongUser для чужого сайта).
+	site, err := h.sites.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			h.reply(chatID, "❌ Сайт не найден.", nil)
 			return
 		}
+		if errors.Is(err, domain.ErrSiteNotBelongUser) {
+			h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
+			return
+		}
 		log.Printf("telegram: cmdVerify GetByID: %v", err)
 		h.reply(chatID, "⚠️ Внутренняя ошибка.", nil)
-		return
-	}
-	if site.UserID != userID {
-		h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
 		return
 	}
 
@@ -229,29 +229,30 @@ func (h *Handler) cmdStats(ctx context.Context, chatID int64, userID uuid.UUID) 
 	h.reply(chatID, formatStats(stats), nil)
 }
 
-// loadOwnedSite парсит id и загружает сайт, проверяя принадлежность пользователю.
-func (h *Handler) loadOwnedSite(ctx context.Context, chatID int64, userID uuid.UUID, rawID string) (domain.Site, bool) {
+// loadOwnedSite парсит id и загружает сайт через сервис, который сам проверяет
+// принадлежность пользователю (GetByID -> ErrSiteNotBelongUser для чужого).
+func (h *Handler) loadOwnedSite(ctx context.Context, chatID int64, userID uuid.UUID, rawID string) (domain.SiteResponse, bool) {
 	id, err := uuid.Parse(rawID)
 	if err != nil {
 		h.reply(chatID, "❌ Некорректный ID сайта.", nil)
-		return domain.Site{}, false
+		return domain.SiteResponse{}, false
 	}
 
-	site, err := h.sites.GetByID(ctx, id)
+	site, err := h.sites.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			h.reply(chatID, "❌ Сайт не найден.", nil)
-			return domain.Site{}, false
+			return domain.SiteResponse{}, false
+		}
+		if errors.Is(err, domain.ErrSiteNotBelongUser) {
+			h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
+			return domain.SiteResponse{}, false
 		}
 		log.Printf("telegram: loadOwnedSite: %v", err)
 		h.reply(chatID, "⚠️ Внутренняя ошибка.", nil)
-		return domain.Site{}, false
+		return domain.SiteResponse{}, false
 	}
 
-	if site.UserID != userID {
-		h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
-		return domain.Site{}, false
-	}
 	return site, true
 }
 
