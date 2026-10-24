@@ -1,7 +1,7 @@
 -- 000002_create_sites_table.up.sql
 
 CREATE TABLE IF NOT EXISTS sites (
-    id UUID PRIMARY KEY DEFAULT get_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     url VARCHAR(500) NOT NULL,
     name VARCHAR(255) NOT NULL,
     check_interval_seconds INT NOT NULL DEFAULT 60,
