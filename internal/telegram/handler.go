@@ -242,6 +242,8 @@ func humanizeError(err error) string {
 		return "сайт вам не принадлежит"
 	case errors.Is(err, domain.ErrNotFound):
 		return "не найдено"
+	case errors.Is(err, domain.ErrInvalidURL):
+		return "недопустимый URL (нужен http/https без внутренних адресов)"
 	default:
 		return "внутренняя ошибка"
 	}

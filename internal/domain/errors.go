@@ -17,4 +17,5 @@ var (
 
 	ErrSiteNotBelongUser = errors.New("site does not belong to user")
 	ErrSiteNotActive     = errors.New("site not active")
+	ErrInvalidURL        = errors.New("invalid or forbidden site URL")
 )

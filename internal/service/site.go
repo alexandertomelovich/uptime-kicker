@@ -46,6 +46,10 @@ type CreateSiteRequest struct {
 // Create создаёт сайт и сразу включает его в мониторинг: статус "pending"
 // означает лишь, что ни одной проверки ещё не было.
 func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
+	if err := validateSiteURL(req.Url); err != nil {
+		return domain.Site{}, err
+	}
+
 	if req.CheckIntervalSeconds < 30 {
 		req.CheckIntervalSeconds = 30
 	}
@@ -172,9 +176,15 @@ func (s *SiteService) GetSiteStats(ctx context.Context, userID uuid.UUID) (domai
 	return stats, nil
 }
 
-// Update частично обновляет сайт и возвращает безопасный SiteResponse (без
-// verification-токена). Изменять можно только свой сайт.
+// Update частично обновляет сайт и возвращает SiteResponse.
+// Изменять можно только свой сайт.
 func (s *SiteService) Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
+	if update.Url != nil {
+		if err := validateSiteURL(*update.Url); err != nil {
+			return domain.SiteResponse{}, err
+		}
+	}
+
 	site, err := s.repo.GetByID(ctx, update.ID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {

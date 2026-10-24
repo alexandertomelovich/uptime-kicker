@@ -57,7 +57,8 @@ func mapServiceError(err error) (int, string) {
 		errors.Is(err, domain.ErrTelegramAlreadyExists),
 		errors.Is(err, domain.ErrPasswordPolicy),
 		errors.Is(err, domain.ErrInvalidRole),
-		errors.Is(err, domain.ErrSiteNotActive):
+		errors.Is(err, domain.ErrSiteNotActive),
+		errors.Is(err, domain.ErrInvalidURL):
 		return http.StatusBadRequest, err.Error()
 	default:
 		log.Printf("http.mapServiceError: unexpected error: %v", err)
