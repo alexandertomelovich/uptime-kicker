@@ -8,6 +8,7 @@ import (
 	"health_checker/internal/repository/postgres"
 	"log"
 	"time"
+	"unicode/utf8"
 )
 
 // maxErrorMessageLen ограничивает длину текста ошибки, записываемого в БД,
@@ -116,8 +117,9 @@ func (s *CheckerService) notifyStatusChange(
 	text := buildStatusChangeText(site, prevStatus, newStatus, result)
 
 	msg := notifier.Message{
-		ChatID: site.OwnerTelegramID,
-		Text:   text,
+		ChatID:    site.OwnerTelegramID,
+		Text:      text,
+		ParseMode: notifier.ParseModeHTML,
 	}
 
 	if err := s.sendStatusChangeAlert(s.ctx, msg); err != nil {
@@ -130,33 +132,46 @@ func buildStatusChangeText(
 	prevStatus, newStatus domain.SiteStatus,
 	result CheckResult,
 ) string {
+	// Имя и URL сайта задаёт пользователь, а текст ошибки приходит от удалённого
+	// сервера. Сообщение уходит с ParseMode=HTML, поэтому все эти значения
+	// экранируются: иначе имя вида "<b>" сломает отправку или добавит разметку.
+	name := notifier.EscapeHTML(site.Name)
+	url := notifier.EscapeHTML(site.Url)
+
 	switch newStatus {
 	case domain.StatusDown:
 		detail := fmt.Sprintf("HTTP %d", result.StatusCode)
 		if result.Err != nil {
-			detail = truncate(result.Err.Error(), maxErrorMessageLen)
+			// Сначала обрезаем, потом экранируем: иначе обрезка могла бы
+			// разорвать HTML-сущность пополам.
+			detail = notifier.EscapeHTML(truncate(result.Err.Error(), maxErrorMessageLen))
 		}
 		return fmt.Sprintf(
 			"🔴 Сайт недоступен: %s (%s)\nСтатус: %s → %s\nОшибка: %s",
-			site.Name, site.Url, prevStatus, newStatus, detail,
+			name, url, prevStatus, newStatus, detail,
 		)
 	case domain.StatusUp:
 		return fmt.Sprintf(
 			"🟢 Сайт снова доступен: %s (%s)\nСтатус: %s → %s\nКод ответа: %d, время: %d мс",
-			site.Name, site.Url, prevStatus, newStatus,
+			name, url, prevStatus, newStatus,
 			result.StatusCode, result.Latency.Milliseconds(),
 		)
 	default:
 		return fmt.Sprintf(
 			"Статус сайта %s (%s) изменился: %s → %s",
-			site.Name, site.Url, prevStatus, newStatus,
+			name, url, prevStatus, newStatus,
 		)
 	}
 }
 
+// truncate обрезает строку до max байт, не разрывая многобайтовый символ:
+// разрезанная руна — невалидный UTF-8, который Telegram отвергает целиком.
 func truncate(s string, max int) string {
 	if len(s) <= max {
 		return s
+	}
+	for max > 0 && !utf8.RuneStart(s[max]) {
+		max--
 	}
 	return s[:max]
 }

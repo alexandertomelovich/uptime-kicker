@@ -279,6 +279,34 @@ func TestUserService_Register_SendsWelcome(t *testing.T) {
 	}
 }
 
+// Имя пользователя подставляется в welcome-сообщение с ParseMode=HTML, поэтому
+// должно быть экранировано: иначе регистрация с именем "<b>" ломает разметку.
+func TestUserService_SendWelcome_EscapesName(t *testing.T) {
+	sender := &capturingSender{}
+	svc := newTestUserService(&mockUserRepo{}, sender, nil)
+
+	svc.sendWelcome(&domain.User{ID: uuid.New(), TelegramID: 99, Name: `<b>hack</b>`})
+
+	if sender.count() != 1 {
+		t.Fatalf("сообщений = %d, want 1", sender.count())
+	}
+	msg := sender.messages[0]
+	if msg.ParseMode != notifier.ParseModeHTML {
+		t.Errorf("ParseMode = %q, want %q", msg.ParseMode, notifier.ParseModeHTML)
+	}
+	if strings.Contains(msg.Text, "<b>") {
+		t.Errorf("имя не экранировано: %q", msg.Text)
+	}
+	if !strings.Contains(msg.Text, "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("ожидалось экранированное имя: %q", msg.Text)
+	}
+	// Вместе с именем проверяем и статическую подсказку "/add <url>": в HTML она
+	// тоже должна быть записана сущностями.
+	if strings.ContainsAny(msg.Text, "<>") {
+		t.Errorf("в сообщении остались сырые угловые скобки: %q", msg.Text)
+	}
+}
+
 // --- Login ---
 
 // Успешный вход: email приводится к нижнему регистру, пароль сверяется с хешем,

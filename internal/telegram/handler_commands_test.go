@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"health_checker/internal/domain"
+	"health_checker/internal/notifier"
 	"health_checker/internal/service"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -425,5 +426,89 @@ func TestReply_SendErrorDoesNotPanic(t *testing.T) {
 
 	if api.count() != 0 {
 		t.Errorf("при ошибке отправки сообщения не должно быть в списке успешных, got %d", api.count())
+	}
+}
+
+// --- Экранирование пользовательских данных в HTML-сообщениях ---
+
+// Имя сайта, заданное в /add, попадает в сообщение с ParseMode=HTML, поэтому
+// должно быть экранировано: иначе пользователь добавит в ответ свою разметку.
+func TestCmdAdd_EscapesNameInReply(t *testing.T) {
+	sites := &mockSites{
+		createFn: func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: uuid.New(), Name: req.Name, Url: req.Url, VerificationToken: "tok"}, nil
+		},
+	}
+	h, api := newTestHandler(registeredUser(testTelegramID), sites)
+
+	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, `/add https://example.com <b>bold</b>`))
+
+	if strings.Contains(api.lastText(), "<b>") {
+		t.Errorf("имя не экранировано: %q", api.lastText())
+	}
+	if !strings.Contains(api.lastText(), "&lt;b&gt;bold&lt;/b&gt;") {
+		t.Errorf("ожидалось экранированное имя: %q", api.lastText())
+	}
+}
+
+// Подтверждение /remove показывает имя и URL сайта — оба должны быть экранированы.
+func TestCmdRemove_EscapesNameAndURL(t *testing.T) {
+	siteID := uuid.New()
+	user := registeredUser(testTelegramID)
+	sites := &mockSites{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`, Url: `https://s/?a=<i>`}, nil
+		},
+	}
+	h, api := newTestHandler(user, sites)
+
+	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/remove "+siteID.String()))
+
+	text := api.lastText()
+	if strings.Contains(text, "<b>") || strings.Contains(text, "<i>") {
+		t.Errorf("в подтверждении осталась неэкранированная разметка: %q", text)
+	}
+	if !strings.Contains(text, "&lt;b&gt;hack&lt;/b&gt;") || !strings.Contains(text, "&lt;i&gt;") {
+		t.Errorf("имя и URL должны быть экранированы: %q", text)
+	}
+}
+
+// Имя сайта в сообщении об успешном подтверждении тоже экранируется.
+func TestCmdVerify_EscapesNameInReply(t *testing.T) {
+	siteID := uuid.New()
+	user := registeredUser(testTelegramID)
+	sites := &mockSites{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`}, nil
+		},
+	}
+	h, api := newTestHandler(user, sites)
+
+	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+siteID.String()+" tok"))
+
+	if strings.Contains(api.lastText(), "<b>") {
+		t.Errorf("имя не экранировано: %q", api.lastText())
+	}
+	if !strings.Contains(api.lastText(), "&lt;b&gt;hack&lt;/b&gt;") {
+		t.Errorf("ожидалось экранированное имя: %q", api.lastText())
+	}
+}
+
+// Ни один ответ хендлера не должен содержать «сырых» угловых скобок: всё уходит
+// с ParseMode=HTML, и Telegram отверг бы сообщение с неизвестным тегом.
+func TestHandlerReplies_HaveNoRawMarkup(t *testing.T) {
+	h, api := newTestHandler(registeredUser(testTelegramID), &mockSites{})
+
+	commands := []string{"/start", "/help", "/add", "/list", "/status", "/remove", "/verify", "/stats"}
+	for _, cmd := range commands {
+		h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, cmd))
+
+		last := api.sent[len(api.sent)-1]
+		if last.ParseMode != notifier.ParseModeHTML {
+			t.Errorf("%s: ParseMode = %q, want %q", cmd, last.ParseMode, notifier.ParseModeHTML)
+		}
+		if strings.ContainsAny(last.Text, "<>") {
+			t.Errorf("%s: в ответе остались сырые угловые скобки: %q", cmd, last.Text)
+		}
 	}
 }

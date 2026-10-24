@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"health_checker/internal/domain"
+	"health_checker/internal/notifier"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/google/uuid"
@@ -68,7 +69,7 @@ func (h *Handler) HandleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		h.reply(chatID, formatSiteDetail(site), &kb)
 	case actionRemove:
 		kb := confirmRemoveKeyboard(site.ID.String())
-		h.reply(chatID, fmt.Sprintf("Удалить сайт «%s» (%s)?", site.Name, site.Url), &kb)
+		h.reply(chatID, fmt.Sprintf("Удалить сайт «%s» (%s)?", notifier.EscapeHTML(site.Name), notifier.EscapeHTML(site.Url)), &kb)
 	case actionConfirm:
 		h.confirmRemove(ctx, chatID, user.ID, site)
 	case actionToggle:
@@ -84,7 +85,7 @@ func (h *Handler) confirmRemove(ctx context.Context, chatID int64, userID uuid.U
 		h.reply(chatID, "❌ Не удалось удалить: "+humanizeError(err), nil)
 		return
 	}
-	h.reply(chatID, fmt.Sprintf("🗑 Сайт «%s» удалён.", site.Name), nil)
+	h.reply(chatID, fmt.Sprintf("🗑 Сайт «%s» удалён.", notifier.EscapeHTML(site.Name)), nil)
 }
 
 // toggleSite переключает активность сайта (пауза/возобновление).
@@ -107,7 +108,7 @@ func (h *Handler) toggleSite(ctx context.Context, chatID int64, userID uuid.UUID
 	}
 
 	kb := siteDetailKeyboard(updated.ID.String(), updated.IsActive)
-	h.reply(chatID, fmt.Sprintf("✅ Сайт «%s» %s.", updated.Name, stateText), &kb)
+	h.reply(chatID, fmt.Sprintf("✅ Сайт «%s» %s.", notifier.EscapeHTML(updated.Name), stateText), &kb)
 }
 
 // parseCallbackData разбирает строку "<action>:<siteID>".

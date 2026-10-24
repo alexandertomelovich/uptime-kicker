@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"health_checker/internal/domain"
 	"health_checker/internal/notifier"
@@ -61,6 +62,20 @@ func TestTruncate(t *testing.T) {
 	}
 }
 
+// Обрезка не должна разрывать многобайтовый символ: битый UTF-8 Telegram
+// отвергает целиком, и алерт вообще не дойдёт до владельца.
+func TestTruncate_DoesNotSplitRunes(t *testing.T) {
+	src := strings.Repeat("я", 10) // 2 байта на символ, всего 20
+	got := truncate(src, 5)        // 5 — середина третьего символа
+
+	if !utf8.ValidString(got) {
+		t.Errorf("truncate вернул невалидный UTF-8: %q", got)
+	}
+	if got != "яя" {
+		t.Errorf("truncate = %q, want %q", got, "яя")
+	}
+}
+
 // --- buildStatusChangeText ---
 
 func TestBuildStatusChangeText_Down_UsesHTTPCode(t *testing.T) {
@@ -96,6 +111,29 @@ func TestBuildStatusChangeText_Down_TruncatesError(t *testing.T) {
 
 	if strings.Contains(text, strings.Repeat("e", maxErrorMessageLen+1)) {
 		t.Error("ошибка в тексте не была обрезана")
+	}
+}
+
+// Имя сайта и URL задаёт пользователь, текст ошибки приходит от внешнего сервера,
+// а сообщение уходит с ParseMode=HTML — всё это должно быть экранировано.
+func TestBuildStatusChangeText_EscapesUserData(t *testing.T) {
+	site := domain.Site{Name: `<b>hack</b>`, Url: `https://x/?a=<i>&b=1`}
+	text := buildStatusChangeText(site, domain.StatusUp, domain.StatusDown, CheckResult{
+		Err: errors.New(`<script>alert(1)</script> & more`),
+	})
+
+	for _, raw := range []string{"<b>", "<i>", "<script>"} {
+		if strings.Contains(text, raw) {
+			t.Errorf("в тексте остался неэкранированный фрагмент %q: %q", raw, text)
+		}
+	}
+	for _, want := range []string{"&lt;b&gt;hack&lt;/b&gt;", "&lt;i&gt;", "&lt;script&gt;", "&amp; more"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("ожидался экранированный фрагмент %q: %q", want, text)
+		}
+	}
+	if strings.ContainsAny(text, "<>") {
+		t.Errorf("в тексте алерта остались сырые угловые скобки: %q", text)
 	}
 }
 
@@ -152,6 +190,11 @@ func TestProcessResult_StatusChange_NotifiesOwner(t *testing.T) {
 	}
 	if sender.messages[0].ChatID != 42 {
 		t.Errorf("chatID = %d, want 42", sender.messages[0].ChatID)
+	}
+	// Алерт содержит имя/URL сайта и текст ошибки, поэтому обязан уходить как
+	// HTML с экранированными значениями.
+	if sender.messages[0].ParseMode != notifier.ParseModeHTML {
+		t.Errorf("ParseMode = %q, want %q", sender.messages[0].ParseMode, notifier.ParseModeHTML)
 	}
 }
 
