@@ -43,6 +43,11 @@ type CreateSiteRequest struct {
 	CheckIntervalSeconds int    `json:"check_interval_seconds"`
 }
 
+// minCheckIntervalSeconds — минимальный интервал проверки сайта. Применяется
+// и при создании, и при обновлении: слишком частые проверки позволили бы
+// одному пользователю генерировать заметную нагрузку на чужие сайты.
+const minCheckIntervalSeconds = 30
+
 // Create создаёт сайт и сразу включает его в мониторинг: статус "pending"
 // означает лишь, что ни одной проверки ещё не было.
 func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
@@ -50,8 +55,8 @@ func (s *SiteService) Create(ctx context.Context, req CreateSiteRequest, userID 
 		return domain.Site{}, err
 	}
 
-	if req.CheckIntervalSeconds < 30 {
-		req.CheckIntervalSeconds = 30
+	if req.CheckIntervalSeconds < minCheckIntervalSeconds {
+		req.CheckIntervalSeconds = minCheckIntervalSeconds
 	}
 
 	site := domain.Site{
@@ -183,6 +188,11 @@ func (s *SiteService) Update(ctx context.Context, update domain.SiteUpdate) (dom
 		if err := validateSiteURL(*update.Url); err != nil {
 			return domain.SiteResponse{}, err
 		}
+	}
+
+	if update.CheckIntervalSeconds != nil && *update.CheckIntervalSeconds < minCheckIntervalSeconds {
+		v := minCheckIntervalSeconds
+		update.CheckIntervalSeconds = &v
 	}
 
 	site, err := s.repo.GetByID(ctx, update.ID)

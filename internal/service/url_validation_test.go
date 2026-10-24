@@ -119,3 +119,60 @@ func TestSiteService_Update_ValidURL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// --- минимальный интервал проверки ---
+
+// Интервал ниже минимума при обновлении подтягивается до 30 секунд,
+// как и при создании.
+func TestSiteService_Update_IntervalClamped(t *testing.T) {
+	userID := uuid.New()
+	var captured *domain.SiteUpdate
+	repo := &mockSiteRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: id, UserID: userID}, nil
+		},
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+			captured = &update
+			return domain.Site{ID: update.ID}, nil
+		},
+	}
+	svc := newTestSiteService(repo, nil)
+
+	tooSmall := 1
+	if _, err := svc.Update(context.Background(), domain.SiteUpdate{
+		ID: uuid.New(), UserID: userID, CheckIntervalSeconds: &tooSmall,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if captured == nil || captured.CheckIntervalSeconds == nil || *captured.CheckIntervalSeconds != minCheckIntervalSeconds {
+		t.Errorf("интервал должен быть поднят до %d, got %+v", minCheckIntervalSeconds, captured)
+	}
+}
+
+// Корректный интервал при обновлении не меняется.
+func TestSiteService_Update_IntervalKept(t *testing.T) {
+	userID := uuid.New()
+	var captured *domain.SiteUpdate
+	repo := &mockSiteRepo{
+		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+			return domain.Site{ID: id, UserID: userID}, nil
+		},
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
+			captured = &update
+			return domain.Site{ID: update.ID}, nil
+		},
+	}
+	svc := newTestSiteService(repo, nil)
+
+	good := 300
+	if _, err := svc.Update(context.Background(), domain.SiteUpdate{
+		ID: uuid.New(), UserID: userID, CheckIntervalSeconds: &good,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if captured == nil || captured.CheckIntervalSeconds == nil || *captured.CheckIntervalSeconds != 300 {
+		t.Errorf("интервал не должен меняться, got %+v", captured)
+	}
+}
