@@ -271,7 +271,7 @@ func TestFormatSiteList_EscapesUserData(t *testing.T) {
 
 // Детальная карточка экранирует имя и URL, но не ломает остальные поля.
 func TestFormatSiteDetail_EscapesUserData(t *testing.T) {
-	site := domain.Site{
+	site := domain.SiteResponse{
 		ID:     uuid.New(),
 		Name:   injectionName,
 		Url:    injectionURL,
@@ -298,7 +298,7 @@ func TestFormatSiteDetail_EscapesUserData(t *testing.T) {
 // скобок: Telegram парсит их как разметку, а неизвестный тег — это отказ
 // отправки целиком. Проверяем и статические подсказки, и функции форматирования.
 func TestMessageTexts_HaveNoRawMarkup(t *testing.T) {
-	site := domain.Site{ID: uuid.New(), Name: injectionName, Url: injectionURL, Status: domain.StatusUp}
+	site := domain.SiteResponse{ID: uuid.New(), Name: injectionName, Url: injectionURL, Status: domain.StatusUp}
 	unverified := site
 	unverified.IsActive = false
 

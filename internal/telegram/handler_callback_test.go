@@ -250,11 +250,11 @@ func TestHandleCallback_Toggle_EscapesName(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			return ownedSite(id, user.user.ID, true), nil
 		},
-		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.Site, error) {
-			return domain.Site{ID: update.ID, IsActive: *update.IsActive, Name: `<b>hack</b>`}, nil
+		updateFn: func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: update.ID, IsActive: *update.IsActive, Name: `<b>hack</b>`}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -275,7 +275,7 @@ func TestHandleCallback_Remove_EscapesNameAndURL(t *testing.T) {
 	user := registeredUser(testTelegramID)
 	siteID := uuid.New()
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
 			site := ownedSite(id, user.user.ID, true)
 			site.Name = `<b>hack</b>`
 			site.Url = `https://s/?a=<i>`

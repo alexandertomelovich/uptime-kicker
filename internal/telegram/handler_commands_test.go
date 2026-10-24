@@ -456,8 +456,8 @@ func TestCmdRemove_EscapesNameAndURL(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`, Url: `https://s/?a=<i>`}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`, Url: `https://s/?a=<i>`}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
@@ -478,8 +478,8 @@ func TestCmdVerify_EscapesNameInReply(t *testing.T) {
 	siteID := uuid.New()
 	user := registeredUser(testTelegramID)
 	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`}, nil
+		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
+			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`}, nil
 		},
 	}
 	h, api := newTestHandler(user, sites)
