@@ -1,4 +1,4 @@
-"# Binaries
+# Binaries
 *.exe
 *.exe~
 *.dll
@@ -10,6 +10,11 @@ server
 # Test binary / coverage
 *.test
 *.out
+cover
+cover_telegram
+
+# Generated artifacts
+out.svg
 
 # Go workspace
 go.work
@@ -24,4 +29,3 @@ go.work
 .idea/
 .vscode/
 *.swp
-"

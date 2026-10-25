@@ -41,5 +41,4 @@ type SiteService interface {
 	GetSiteStats(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
 	Delete(ctx context.Context, id, userID uuid.UUID) error
 	Update(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
-	VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error
 }

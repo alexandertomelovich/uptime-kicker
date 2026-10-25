@@ -163,43 +163,6 @@ func TestFormatSiteDetail_WithOptionalFields(t *testing.T) {
 	}
 }
 
-// Неактивный и неподтверждённый сайт -> предупреждение с подсказкой /verify.
-func TestFormatSiteDetail_NotVerifiedWarning(t *testing.T) {
-	site := domain.SiteResponse{
-		ID:         uuid.New(),
-		Url:        "https://example.com",
-		Name:       "Example",
-		Status:     domain.StatusPending,
-		IsActive:   false,
-		VerifiedAt: nil,
-	}
-
-	got := formatSiteDetail(site)
-
-	if !strings.Contains(got, "/verify") {
-		t.Errorf("ожидалось предупреждение о неподтверждённом сайте: %q", got)
-	}
-}
-
-// Активный и подтверждённый сайт не получает предупреждение.
-func TestFormatSiteDetail_VerifiedNoWarning(t *testing.T) {
-	verified := time.Now()
-	site := domain.SiteResponse{
-		ID:         uuid.New(),
-		Url:        "https://example.com",
-		Name:       "Example",
-		Status:     domain.StatusUp,
-		IsActive:   true,
-		VerifiedAt: &verified,
-	}
-
-	got := formatSiteDetail(site)
-
-	if strings.Contains(got, "не подтверждён") {
-		t.Errorf("подтверждённый сайт не должен получать предупреждение: %q", got)
-	}
-}
-
 // --- formatStats ---
 
 func TestFormatStats(t *testing.T) {
@@ -299,8 +262,8 @@ func TestFormatSiteDetail_EscapesUserData(t *testing.T) {
 // отправки целиком. Проверяем и статические подсказки, и функции форматирования.
 func TestMessageTexts_HaveNoRawMarkup(t *testing.T) {
 	site := domain.SiteResponse{ID: uuid.New(), Name: injectionName, Url: injectionURL, Status: domain.StatusUp}
-	unverified := site
-	unverified.IsActive = false
+	inactive := site
+	inactive.IsActive = false
 
 	texts := []struct {
 		name string
@@ -311,7 +274,7 @@ func TestMessageTexts_HaveNoRawMarkup(t *testing.T) {
 		{"пустой список", formatSiteList(nil)},
 		{"список", formatSiteList([]domain.SiteResponse{{Name: injectionName, Url: injectionURL, Status: domain.StatusUp, IsActive: true}})},
 		{"карточка", formatSiteDetail(site)},
-		{"неподтверждённый сайт", formatSiteDetail(unverified)},
+		{"неактивный сайт", formatSiteDetail(inactive)},
 		{"статистика", formatStats(domain.SiteStats{TotalSites: 1})},
 	}
 

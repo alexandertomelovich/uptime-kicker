@@ -33,6 +33,12 @@ func (h *Handler) HandleCallback(ctx context.Context, cb *tgbotapi.CallbackQuery
 		return
 	}
 
+	// Callback не всегда несёт сообщение (например, из inline-режима) —
+	// без проверки обращение к cb.Message.Chat.ID паниковало бы.
+	if cb.Message == nil {
+		log.Printf("telegram: callback %s has no message, ignoring", cb.ID)
+		return
+	}
 	chatID := cb.Message.Chat.ID
 	telegramID := cb.From.ID
 

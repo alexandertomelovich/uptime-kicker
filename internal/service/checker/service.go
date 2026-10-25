@@ -6,6 +6,7 @@ import (
 	"health_checker/internal/domain"
 	"health_checker/internal/notifier"
 	"health_checker/internal/repository/postgres"
+	"net/http"
 	"sync"
 	"time"
 
@@ -46,6 +47,10 @@ type CheckerService struct {
 	jobsChan    chan CheckJob
 	resultsChan chan CheckResult
 
+	// client общий для всех воркеров: переиспользуется пул соединений
+	// (keep-alive), а не создаётся заново на каждую проверку.
+	client *http.Client
+
 	ctx       context.Context
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
@@ -70,6 +75,7 @@ func NewCheckerService(
 		limit:       limit,
 		jobsChan:    make(chan CheckJob, queueSize),
 		resultsChan: make(chan CheckResult, queueSize),
+		client:      &http.Client{Timeout: 10 * time.Second},
 		ctx:         ctx,
 		cancel:      cancel,
 	}

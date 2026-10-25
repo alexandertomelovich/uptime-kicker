@@ -68,9 +68,6 @@ func formatSiteDetail(s domain.SiteResponse) string {
 	if s.ResponseTimeMs != nil {
 		fmt.Fprintf(&b, "Время ответа: %d мс\n", *s.ResponseTimeMs)
 	}
-	if !s.IsActive && s.VerifiedAt == nil {
-		b.WriteString("\n⚠️ Сайт не подтверждён. Используйте /verify &lt;id&gt; &lt;token&gt;")
-	}
 	return b.String()
 }
 
@@ -98,7 +95,6 @@ const helpText = `🤖 Uptime Kicker — бот мониторинга сайт�
 /list — список ваших сайтов
 /status &lt;id&gt; — подробная информация о сайте
 /remove &lt;id&gt; — удалить сайт
-/verify &lt;id&gt; &lt;token&gt; — подтвердить владение сайтом
 /stats — статистика
 /help — эта справка
 

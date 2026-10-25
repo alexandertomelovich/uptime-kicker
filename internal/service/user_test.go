@@ -66,8 +66,8 @@ func (m *mockTokenStore) Save(ctx context.Context, jti, userID uuid.UUID, expire
 	return nil
 }
 
-func (m *mockTokenStore) Exists(ctx context.Context, jti uuid.UUID) (bool, error) {
-	return true, nil
+func (m *mockTokenStore) Take(ctx context.Context, jti uuid.UUID) (uuid.UUID, error) {
+	return uuid.Nil, auth.ErrTokenRevoked
 }
 
 func (m *mockTokenStore) Delete(ctx context.Context, jti uuid.UUID) error { return nil }
@@ -369,6 +369,36 @@ func TestUserService_Login_WrongPassword(t *testing.T) {
 	_, err := svc.Login(context.Background(), "alice@example.com", "wrong-Passw0rd!")
 	if !errors.Is(err, domain.ErrInvalidCredentials) {
 		t.Fatalf("err = %v, want ErrInvalidCredentials", err)
+	}
+}
+
+// Сбой БД при поиске пользователя — внутренняя ошибка, а не «неверные
+// учётные данные» (клиент не должен принимать падение БД за неверный пароль).
+func TestUserService_Login_RepoErrorWrapped(t *testing.T) {
+	repo := &mockUserRepo{
+		getByEmailFn: func(ctx context.Context, email string) (domain.User, error) {
+			return domain.User{}, errBoom
+		},
+	}
+	svc := newTestUserService(repo, nil, nil)
+
+	_, err := svc.Login(context.Background(), "alice@example.com", validPassword)
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("err = %v, want wrapped errBoom", err)
+	}
+}
+
+// telegram_id <= 0 отклоняется: на него уходят уведомления, а 0 как
+// уникальное значение делало бы второго пользователя без Telegram
+// невозможным.
+func TestUserService_Register_InvalidTelegramID(t *testing.T) {
+	svc := newTestUserService(&mockUserRepo{}, nil, nil)
+
+	_, err := svc.Register(context.Background(), RegisterRequest{
+		Email: "x@example.com", TelegramID: 0, Password: validPassword,
+	})
+	if !errors.Is(err, domain.ErrInvalidTelegramID) {
+		t.Fatalf("err = %v, want ErrInvalidTelegramID", err)
 	}
 }
 

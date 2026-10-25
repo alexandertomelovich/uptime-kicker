@@ -90,8 +90,6 @@ func (h *Handler) HandleMessage(ctx context.Context, msg *tgbotapi.Message) {
 		h.cmdStatus(ctx, chatID, user.ID, args)
 	case "remove":
 		h.cmdRemove(ctx, chatID, user.ID, args)
-	case "verify":
-		h.cmdVerify(ctx, chatID, user.ID, args)
 	case "stats":
 		h.cmdStats(ctx, chatID, user.ID)
 	default:
@@ -123,10 +121,8 @@ func (h *Handler) cmdAdd(ctx context.Context, chatID int64, userID uuid.UUID, ar
 
 	text := fmt.Sprintf(
 		"✅ Сайт добавлен!\n\n%s %s\nID: %s\n\n"+
-			"⚠️ Для запуска проверок подтвердите владение сайтом:\n"+
-			"разместите на нём файл с содержимым-токеном и вызовите /verify &lt;id&gt; &lt;token&gt;.\n\n"+
-			"Токен: %s",
-		statusEmoji(site.Status), notifier.EscapeHTML(site.Name), site.ID, site.VerificationToken,
+			"Проверки запущены. Я сообщу, если сайт станет недоступен.",
+		statusEmoji(site.Status), notifier.EscapeHTML(site.Name), site.ID,
 	)
 	h.reply(chatID, text, nil)
 }
@@ -179,45 +175,6 @@ func (h *Handler) cmdRemove(ctx context.Context, chatID int64, userID uuid.UUID,
 
 	kb := confirmRemoveKeyboard(site.ID.String())
 	h.reply(chatID, fmt.Sprintf("Удалить сайт «%s» (%s)?", notifier.EscapeHTML(site.Name), notifier.EscapeHTML(site.Url)), &kb)
-}
-
-func (h *Handler) cmdVerify(ctx context.Context, chatID int64, userID uuid.UUID, args []string) {
-	if len(args) < 2 {
-		h.reply(chatID, "Использование: /verify &lt;id&gt; &lt;token&gt;", nil)
-		return
-	}
-
-	id, err := uuid.Parse(args[0])
-	if err != nil {
-		h.reply(chatID, "❌ Некорректный ID сайта.", nil)
-		return
-	}
-
-	// Загружаем сайт, чтобы дать понятную обратную связь. Владение проверяет
-	// сам сервис (GetByID возвращает ErrSiteNotBelongUser для чужого сайта).
-	site, err := h.sites.GetByID(ctx, id, userID)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			h.reply(chatID, "❌ Сайт не найден.", nil)
-			return
-		}
-		if errors.Is(err, domain.ErrSiteNotBelongUser) {
-			h.reply(chatID, "❌ Этот сайт вам не принадлежит.", nil)
-			return
-		}
-		log.Printf("telegram: cmdVerify GetByID: %v", err)
-		h.reply(chatID, "⚠️ Внутренняя ошибка.", nil)
-		return
-	}
-
-	token := args[1]
-	if err := h.sites.VerifySite(ctx, id, userID, token); err != nil {
-		h.reply(chatID, "❌ Не удалось подтвердить сайт: "+humanizeError(err), nil)
-		return
-	}
-
-	kb := siteDetailKeyboard(id.String(), true)
-	h.reply(chatID, fmt.Sprintf("✅ Сайт «%s» успешно подтверждён и активен. Проверки запущены.", notifier.EscapeHTML(site.Name)), &kb)
 }
 
 func (h *Handler) cmdStats(ctx context.Context, chatID int64, userID uuid.UUID) {
@@ -285,10 +242,8 @@ func humanizeError(err error) string {
 		return "сайт вам не принадлежит"
 	case errors.Is(err, domain.ErrNotFound):
 		return "не найдено"
-	case errors.Is(err, domain.ErrSiteAlreadyVerified):
-		return "сайт уже подтверждён"
-	case errors.Is(err, domain.ErrInvalidToken):
-		return "неверный токен подтверждения"
+	case errors.Is(err, domain.ErrInvalidURL):
+		return "недопустимый URL (нужен http/https без внутренних адресов)"
 	default:
 		return "внутренняя ошибка"
 	}

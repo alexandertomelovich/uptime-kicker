@@ -43,6 +43,25 @@ func TestHandleCallback_MalformedData(t *testing.T) {
 	}
 }
 
+// Callback без сообщения (например, из inline-режима) не должен паниковать:
+// нажатие подтверждается, действие игнорируется.
+func TestHandleCallback_NoMessageDoesNotPanic(t *testing.T) {
+	h, api := newTestHandler(registeredUser(testTelegramID), &mockSites{})
+
+	cb := callbackQuery(testTelegramID, testChatID, "status:"+uuid.New().String())
+	cb.Message = nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("callback без сообщения вызвал панику: %v", r)
+		}
+		if api.count() != 0 {
+			t.Errorf("ответов быть не должно, got %d", api.count())
+		}
+	}()
+	h.HandleCallback(context.Background(), cb)
+}
+
 // Пользователь не найден -> сообщение о регистрации, действие не выполняется.
 func TestHandleCallback_UserNotFound(t *testing.T) {
 	users := &mockUsers{err: domain.ErrNotFound}

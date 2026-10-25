@@ -49,8 +49,6 @@ type Site struct {
 	LastCheckedAt        pgtype.Timestamptz `json:"last_checked_at"`
 	ResponseTimeMs       *int32             `json:"response_time_ms"`
 	IsActive             *bool              `json:"is_active"`
-	VerifiedAt           pgtype.Timestamptz `json:"verified_at"`
-	VerificationToken    *string            `json:"verification_token"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }

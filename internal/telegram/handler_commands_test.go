@@ -96,7 +96,7 @@ func TestHandleMessage_UserResolveError(t *testing.T) {
 func TestCmdAdd_WithURLAndName(t *testing.T) {
 	sites := &mockSites{
 		createFn: func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: uuid.New(), Name: req.Name, Url: req.Url, VerificationToken: "tok"}, nil
+			return domain.Site{ID: uuid.New(), Name: req.Name, Url: req.Url}, nil
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -291,99 +291,6 @@ func TestCmdRemove_NoArgs(t *testing.T) {
 	}
 }
 
-// --- /verify ---
-
-func TestCmdVerify_Success(t *testing.T) {
-	siteID := uuid.New()
-	user := registeredUser(testTelegramID)
-	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
-			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: "S"}, nil
-		},
-	}
-	h, api := newTestHandler(user, sites)
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+siteID.String()+" tok"))
-
-	if sites.lastVerify.token != "tok" || sites.lastVerify.id != siteID {
-		t.Errorf("verify аргументы = %+v", sites.lastVerify)
-	}
-	if !strings.Contains(api.lastText(), "успешно подтверждён") {
-		t.Errorf("ожидалось подтверждение, got %q", api.lastText())
-	}
-}
-
-func TestCmdVerify_NoArgs(t *testing.T) {
-	h, api := newTestHandler(registeredUser(testTelegramID), &mockSites{})
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+uuid.New().String()))
-
-	if !strings.Contains(api.lastText(), "Использование") {
-		t.Errorf("ожидалась подсказка, got %q", api.lastText())
-	}
-}
-
-func TestCmdVerify_InvalidID(t *testing.T) {
-	h, api := newTestHandler(registeredUser(testTelegramID), &mockSites{})
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify bad tok"))
-
-	if !strings.Contains(api.lastText(), "Некорректный ID") {
-		t.Errorf("ожидалась ошибка про ID, got %q", api.lastText())
-	}
-}
-
-func TestCmdVerify_SiteNotFound(t *testing.T) {
-	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
-			return domain.SiteResponse{}, domain.ErrNotFound
-		},
-	}
-	h, api := newTestHandler(registeredUser(testTelegramID), sites)
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+uuid.New().String()+" tok"))
-
-	if !strings.Contains(api.lastText(), "Сайт не найден") {
-		t.Errorf("ожидалось 'Сайт не найден', got %q", api.lastText())
-	}
-}
-
-// Сайт чужой -> сервис (GetByID) возвращает ErrSiteNotBelongUser, до VerifySite не доходим.
-func TestCmdVerify_NotOwned(t *testing.T) {
-	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
-			return domain.SiteResponse{}, domain.ErrSiteNotBelongUser
-		},
-	}
-	h, api := newTestHandler(registeredUser(testTelegramID), sites)
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+uuid.New().String()+" tok"))
-
-	if !strings.Contains(api.lastText(), "не принадлежит") {
-		t.Errorf("ожидалась ошибка принадлежности, got %q", api.lastText())
-	}
-}
-
-func TestCmdVerify_ServiceError(t *testing.T) {
-	siteID := uuid.New()
-	user := registeredUser(testTelegramID)
-	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
-			return domain.SiteResponse{ID: id, UserID: user.user.ID}, nil
-		},
-		verifyFn: func(ctx context.Context, id, userID uuid.UUID, token string) error {
-			return domain.ErrInvalidToken
-		},
-	}
-	h, api := newTestHandler(user, sites)
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+siteID.String()+" tok"))
-
-	if !strings.Contains(api.lastText(), "Не удалось подтвердить") {
-		t.Errorf("ожидалась ошибка подтверждения, got %q", api.lastText())
-	}
-}
-
 // --- /stats ---
 
 func TestCmdStats_Success(t *testing.T) {
@@ -436,7 +343,7 @@ func TestReply_SendErrorDoesNotPanic(t *testing.T) {
 func TestCmdAdd_EscapesNameInReply(t *testing.T) {
 	sites := &mockSites{
 		createFn: func(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
-			return domain.Site{ID: uuid.New(), Name: req.Name, Url: req.Url, VerificationToken: "tok"}, nil
+			return domain.Site{ID: uuid.New(), Name: req.Name, Url: req.Url}, nil
 		},
 	}
 	h, api := newTestHandler(registeredUser(testTelegramID), sites)
@@ -473,33 +380,12 @@ func TestCmdRemove_EscapesNameAndURL(t *testing.T) {
 	}
 }
 
-// Имя сайта в сообщении об успешном подтверждении тоже экранируется.
-func TestCmdVerify_EscapesNameInReply(t *testing.T) {
-	siteID := uuid.New()
-	user := registeredUser(testTelegramID)
-	sites := &mockSites{
-		getByIDFn: func(ctx context.Context, id, userID uuid.UUID) (domain.SiteResponse, error) {
-			return domain.SiteResponse{ID: id, UserID: user.user.ID, Name: `<b>hack</b>`}, nil
-		},
-	}
-	h, api := newTestHandler(user, sites)
-
-	h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, "/verify "+siteID.String()+" tok"))
-
-	if strings.Contains(api.lastText(), "<b>") {
-		t.Errorf("имя не экранировано: %q", api.lastText())
-	}
-	if !strings.Contains(api.lastText(), "&lt;b&gt;hack&lt;/b&gt;") {
-		t.Errorf("ожидалось экранированное имя: %q", api.lastText())
-	}
-}
-
 // Ни один ответ хендлера не должен содержать «сырых» угловых скобок: всё уходит
 // с ParseMode=HTML, и Telegram отверг бы сообщение с неизвестным тегом.
 func TestHandlerReplies_HaveNoRawMarkup(t *testing.T) {
 	h, api := newTestHandler(registeredUser(testTelegramID), &mockSites{})
 
-	commands := []string{"/start", "/help", "/add", "/list", "/status", "/remove", "/verify", "/stats"}
+	commands := []string{"/start", "/help", "/add", "/list", "/status", "/remove", "/stats"}
 	for _, cmd := range commands {
 		h.HandleMessage(context.Background(), cmdMessage(testTelegramID, testChatID, cmd))
 

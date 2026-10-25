@@ -184,6 +184,9 @@ func (r *UserRepository) Update(ctx context.Context, update domain.UserUpdate) e
 
 	_, err := r.queries.UpdateUser(ctx, params)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
 		return fmt.Errorf("repository.UpdateUser: %w", err)
 	}
 	return nil

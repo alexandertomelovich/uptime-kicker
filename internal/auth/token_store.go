@@ -20,10 +20,14 @@ type TokenStore interface {
 	// Save сохраняет активную refresh-сессию.
 	Save(ctx context.Context, jti uuid.UUID, userID uuid.UUID, expiresAt time.Time) error
 
-	// Exists сообщает, активна ли сессия с данным jti.
-	Exists(ctx context.Context, jti uuid.UUID) (bool, error)
+	// Take атомарно изымает сессию при ротации: удаляет её и возвращает
+	// привязанного пользователя. Если сессии уже нет (logout, ротация уже
+	// прошла), возвращает ErrTokenRevoked. Атомарность критична: проверка
+	// «существует?» отдельным запросом открывала бы гонку, при которой один
+	// refresh-токен дважды обменивался на две новые пары.
+	Take(ctx context.Context, jti uuid.UUID) (uuid.UUID, error)
 
-	// Delete удаляет конкретную сессию (ротация при refresh).
+	// Delete удаляет конкретную сессию (logout с этим токеном).
 	Delete(ctx context.Context, jti uuid.UUID) error
 
 	// DeleteAllForUser удаляет все сессии пользователя

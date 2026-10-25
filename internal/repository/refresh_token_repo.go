@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"health_checker/internal/auth"
 	"health_checker/internal/repository/postgres"
 
 	"github.com/google/uuid"
@@ -34,15 +35,18 @@ func (r *RefreshTokenRepository) Save(ctx context.Context, jti uuid.UUID, userID
 	return nil
 }
 
-func (r *RefreshTokenRepository) Exists(ctx context.Context, jti uuid.UUID) (bool, error) {
-	_, err := r.queries.GetRefreshToken(ctx, jti)
+// Take атомарно изымает refresh-сессию: DELETE ... RETURNING выполняется
+// одним оператором, поэтому при гонке двух refresh с одним токеном новую
+// пару сможет выпустить только первый (второй получит ErrTokenRevoked).
+func (r *RefreshTokenRepository) Take(ctx context.Context, jti uuid.UUID) (uuid.UUID, error) {
+	userID, err := r.queries.TakeRefreshToken(ctx, jti)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+			return uuid.Nil, auth.ErrTokenRevoked
 		}
-		return false, fmt.Errorf("repository.RefreshTokenExists: %w", err)
+		return uuid.Nil, fmt.Errorf("repository.TakeRefreshToken: %w", err)
 	}
-	return true, nil
+	return userID, nil
 }
 
 func (r *RefreshTokenRepository) Delete(ctx context.Context, jti uuid.UUID) error {
@@ -55,6 +59,15 @@ func (r *RefreshTokenRepository) Delete(ctx context.Context, jti uuid.UUID) erro
 func (r *RefreshTokenRepository) DeleteAllForUser(ctx context.Context, userID uuid.UUID) error {
 	if err := r.queries.DeleteUserRefreshTokens(ctx, userID); err != nil {
 		return fmt.Errorf("repository.DeleteUserRefreshTokens: %w", err)
+	}
+	return nil
+}
+
+// DeleteExpired удаляет истёкшие refresh-сессии. Вызывается ежедневным
+// cron-ом — иначе таблица refresh_tokens растёт бесконечно.
+func (r *RefreshTokenRepository) DeleteExpired(ctx context.Context) error {
+	if err := r.queries.DeleteExpiredRefreshTokens(ctx); err != nil {
+		return fmt.Errorf("repository.DeleteExpiredRefreshTokens: %w", err)
 	}
 	return nil
 }

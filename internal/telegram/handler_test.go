@@ -111,15 +111,10 @@ type mockSites struct {
 	statsFn   func(ctx context.Context, userID uuid.UUID) (domain.SiteStats, error)
 	deleteFn  func(ctx context.Context, id, userID uuid.UUID) error
 	updateFn  func(ctx context.Context, update domain.SiteUpdate) (domain.SiteResponse, error)
-	verifyFn  func(ctx context.Context, id, userID uuid.UUID, token string) error
 
 	lastCreate service.CreateSiteRequest
 	lastUpdate domain.SiteUpdate
 	lastDelete uuid.UUID
-	lastVerify struct {
-		id    uuid.UUID
-		token string
-	}
 }
 
 func (m *mockSites) Create(ctx context.Context, req service.CreateSiteRequest, userID uuid.UUID) (domain.Site, error) {
@@ -165,15 +160,6 @@ func (m *mockSites) Update(ctx context.Context, update domain.SiteUpdate) (domai
 		return m.updateFn(ctx, update)
 	}
 	return domain.SiteResponse{ID: update.ID}, nil
-}
-
-func (m *mockSites) VerifySite(ctx context.Context, id, userID uuid.UUID, token string) error {
-	m.lastVerify.id = id
-	m.lastVerify.token = token
-	if m.verifyFn != nil {
-		return m.verifyFn(ctx, id, userID, token)
-	}
-	return nil
 }
 
 // --- Хелперы сборки ---

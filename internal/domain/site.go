@@ -26,8 +26,6 @@ type Site struct {
 	LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
 	ResponseTimeMs       *int32     `json:"response_time_ms,omitempty"`
 	IsActive             bool       `json:"is_active"`
-	VerifiedAt           *time.Time `json:"verified_at,omitempty"`
-	VerificationToken    string     `json:"verification_token"`
 	CreatedAt            time.Time  `json:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at"`
 
@@ -63,7 +61,6 @@ type SiteResponse struct {
 	UserID               uuid.UUID  `json:"user_id"`
 	Status               SiteStatus `json:"status"`
 	IsActive             bool       `json:"is_active"`
-	VerifiedAt           *time.Time `json:"verified_at,omitempty"`
 	LastCheckedAt        *time.Time `json:"last_checked_at,omitempty"`
 	LastStatusCode       *int32     `json:"last_status_code,omitempty"`
 	ResponseTimeMs       *int32     `json:"response_time_ms,omitempty"`
@@ -80,7 +77,6 @@ func (s Site) ToResponse() SiteResponse {
 		UserID:               s.UserID,
 		Status:               s.Status,
 		IsActive:             s.IsActive,
-		VerifiedAt:           s.VerifiedAt,
 		LastCheckedAt:        s.LastCheckedAt,
 		LastStatusCode:       s.LastStatusCode,
 		ResponseTimeMs:       s.ResponseTimeMs,

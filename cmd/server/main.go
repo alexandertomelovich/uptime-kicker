@@ -57,12 +57,27 @@ func run() error {
 	userRepo := repository.NewUserRepository(queries)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(queries)
 
-	bot, err := tgbotapi.NewBotAPI(cfg.Telegram.Token)
+	// Два клиента Telegram API с разными таймаутами: getUpdates держит
+	// соединение до 30 секунд (long-polling), а отправка алертов и реплаев
+	// не должна занимать столько же — иначе зависший Telegram API
+	// останавливает обработку результатов проверок. Дефолтный клиент
+	// tgbotapi.NewBotAPI вообще без таймаута, поэтому задаём явно.
+	pollBot, err := tgbotapi.NewBotAPIWithClient(
+		cfg.Telegram.Token, tgbotapi.APIEndpoint,
+		&http.Client{Timeout: 45 * time.Second},
+	)
 	if err != nil {
 		return err
 	}
-	sender := telegram.NewSender(bot)
-	log.Printf("telegram bot authorized as @%s", bot.Self.UserName)
+	sendBot, err := tgbotapi.NewBotAPIWithClient(
+		cfg.Telegram.Token, tgbotapi.APIEndpoint,
+		&http.Client{Timeout: 10 * time.Second},
+	)
+	if err != nil {
+		return err
+	}
+	sender := telegram.NewSender(sendBot)
+	log.Printf("telegram bot authorized as @%s", pollBot.Self.UserName)
 
 	checker := checkersvc.NewCheckerService(
 		siteRepo,
@@ -74,8 +89,8 @@ func run() error {
 	)
 	checker.Start()
 
-	dailyStats := cronsvc.NewDailyStatsService(checkRepo)
-	if err := dailyStats.StartCron(); err != nil {
+	maintenance := cronsvc.NewMaintenanceService(checkRepo, refreshTokenRepo)
+	if err := maintenance.StartCron(); err != nil {
 		return err
 	}
 
@@ -96,10 +111,10 @@ func run() error {
 	// --- Telegram-бот (long-polling) ---
 	// Пользователь резолвится по telegram_id напрямую через репозиторий
 	// (метод без admin-claims), а операции над сайтами идут через siteService.
-	telegramHandler := telegram.NewHandler(bot, userRepo, siteService)
-	telegramBot := telegram.NewBot(bot, telegramHandler)
+	telegramHandler := telegram.NewHandler(pollBot, userRepo, siteService)
+	telegramBot := telegram.NewBot(pollBot, telegramHandler)
 
-	router := newRouter(userHandler, siteHandler, jwtManager.AuthMiddleware)
+	router := newRouter(userHandler, siteHandler, jwtManager.AuthMiddleware, pool.Ping)
 	srv := &http.Server{
 		Addr:    ":" + cfg.HTTP.Port,
 		Handler: router,
@@ -148,13 +163,21 @@ func run() error {
 	}
 
 	checker.Stop()
-	dailyStats.StopCron(shutdownCtx)
+	maintenance.StopCron(shutdownCtx)
 
 	log.Println("shutdown complete")
 	return nil
 }
 
-func newRouter(userHandler *httphandler.UserHandler, siteHandler *httphandler.SiteHandler, authMiddleware func(http.Handler) http.Handler) http.Handler {
+// newRouter собирает HTTP-роутер. ping используется healthz-пробой:
+// живой процесс с мёртвой БД не должен считаться здоровым (балансировщик
+// по 503 уведёт трафик на живые инстансы).
+func newRouter(
+	userHandler *httphandler.UserHandler,
+	siteHandler *httphandler.SiteHandler,
+	authMiddleware func(http.Handler) http.Handler,
+	ping func(ctx context.Context) error,
+) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -162,6 +185,12 @@ func newRouter(userHandler *httphandler.UserHandler, siteHandler *httphandler.Si
 	r.Use(middleware.Recoverer)
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := ping(ctx); err != nil {
+			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		if _, err := w.Write([]byte("ok")); err != nil {
 			log.Printf("healthz: failed to write response: %v", err)

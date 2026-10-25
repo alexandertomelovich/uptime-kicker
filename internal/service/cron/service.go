@@ -10,17 +10,27 @@ import (
 	cron "github.com/netresearch/go-cron"
 )
 
-// dailyStatsSpec — расписание агрегации дневной статистики (каждый день в 00:05).
+// dailyStatsSpec — расписание ежедневного обслуживания (каждый день в 00:05).
 const dailyStatsSpec = "5 0 * * *"
 
-// CheckRepository описывает операции над статистикой проверок, нужные cron-сервису.
+// CheckRepository описывает операции над логами проверок, нужные cron-сервису.
 type CheckRepository interface {
 	AggregateDailyStats(ctx context.Context) error
+	ClearLogs(ctx context.Context) error
 }
 
-type DailyStatsService struct {
-	repo CheckRepository
-	cron *cron.Cron
+// TokenCleaner описывает очистку истёкших refresh-сессий.
+type TokenCleaner interface {
+	DeleteExpired(ctx context.Context) error
+}
+
+// MaintenanceService ежедневно агрегирует дневную статистику и подчищает
+// устаревшие данные: сырые логи проверок старше суток и истёкшие
+// refresh-сессии. Без очистки обе таблицы росли бы бесконечно.
+type MaintenanceService struct {
+	repo   CheckRepository
+	tokens TokenCleaner
+	cron   *cron.Cron
 
 	// mu защищает started от гонок StartCron/StopCron.
 	mu sync.Mutex
@@ -31,9 +41,10 @@ type DailyStatsService struct {
 	started bool
 }
 
-func NewDailyStatsService(repo CheckRepository) *DailyStatsService {
-	return &DailyStatsService{
-		repo: repo,
+func NewMaintenanceService(repo CheckRepository, tokens TokenCleaner) *MaintenanceService {
+	return &MaintenanceService{
+		repo:   repo,
+		tokens: tokens,
 		cron: cron.New(
 			// SkipIfStillRunning не даёт перекрываться прогонам одной задачи,
 			// если предыдущий ещё не завершился.
@@ -42,7 +53,7 @@ func NewDailyStatsService(repo CheckRepository) *DailyStatsService {
 	}
 }
 
-func (s *DailyStatsService) StartCron() error {
+func (s *MaintenanceService) StartCron() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -64,7 +75,7 @@ func (s *DailyStatsService) StartCron() error {
 // cron.Stop() возвращает контекст, который отменяется, когда все запущенные
 // задачи завершились. Дополнительно уважается переданный ctx (таймаут/отмена),
 // чтобы вызов не мог зависнуть навсегда.
-func (s *DailyStatsService) StopCron(ctx context.Context) {
+func (s *MaintenanceService) StopCron(ctx context.Context) {
 	done := s.cron.Stop()
 
 	select {
@@ -75,20 +86,33 @@ func (s *DailyStatsService) StopCron(ctx context.Context) {
 	}
 }
 
-func (s *DailyStatsService) ExecuteDailyCheck() {
+// ExecuteDailyCheck прогоняет полный цикл обслуживания. Порядок важен:
+// сырые логи удаляются только после успешной агрегации — иначе при сбое БД
+// можно было бы удалить данные, которые ещё не попали в дневную статистику.
+func (s *MaintenanceService) ExecuteDailyCheck() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Panic in daily check: %v", r)
+			log.Printf("Panic in daily maintenance: %v", r)
 		}
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	log.Println("Starting daily check...")
+	log.Println("Starting daily maintenance...")
+
 	if err := s.repo.AggregateDailyStats(ctx); err != nil {
-		log.Printf("Daily check failed: %v", err)
-		return
+		log.Printf("Daily stats aggregation failed, skipping log cleanup: %v", err)
+	} else if err := s.repo.ClearLogs(ctx); err != nil {
+		log.Printf("Log cleanup failed: %v", err)
 	}
-	log.Println("Daily check completed successfully")
+
+	// Очистка refresh-токенов не зависит от агрегации логов.
+	if s.tokens != nil {
+		if err := s.tokens.DeleteExpired(ctx); err != nil {
+			log.Printf("Expired refresh token cleanup failed: %v", err)
+		}
+	}
+
+	log.Println("Daily maintenance completed")
 }

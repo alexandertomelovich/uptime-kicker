@@ -33,10 +33,8 @@ func (s *CheckerService) doCheck(id int, job CheckJob) {
 		return
 	}
 
-	client := &http.Client{}
-
 	start := time.Now()
-	resp, err := client.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		s.emitResult(CheckResult{
 			SiteID:  job.SiteID,
